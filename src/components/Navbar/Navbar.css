@@ -15,7 +15,7 @@
 .navbar-logo img:hover {
     transform: rotate(45deg) scale(1.1);
     cursor: pointer;
-    box-shadow: 0 4px 8px rgba(34, 197, 94, 0.5); /* Tailwind green-500 with shadow */
+    box-shadow: 0 0 8px 4px rgba(34, 197, 94, 0.5); /* Symmetric shadow around icon */
     background: #bbf7d0; /* Tailwind green-100 */
     border-radius: 50rem;
 }
