@@ -1,3 +1,4 @@
+
 .map-container {
     position: absolute;
     top: 50px;           /* Start below the navbar */
@@ -8,3 +9,35 @@
     height: calc(100vh - 50px); /* Fill remaining space */
     z-index: 0;
 }
+
+.custom-map-controls {
+    position: absolute;
+    bottom: 8px;
+    right: 10px;
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    background: rgba(255,255,255,0.0); /* fully transparent */
+    padding: 0;
+    z-index: 10;
+    align-items: center;
+}
+
+.map-btn {
+    border: none;
+    outline: none;
+    border-radius: 1rem;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #111;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s;
+}
+.map-btn:hover {
+    background: rgba(0,0,0,0.08);
+    color: #000;
+}
+
