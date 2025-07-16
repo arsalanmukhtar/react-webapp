@@ -31,8 +31,10 @@ const MapContainer = () => {
                 }}
                 mapStyle="mapbox://styles/mapbox/streets-v12"
                 mapboxAccessToken={MapboxAccessToken}
+                attributionControl={false}
+                hash={true}
             >
-                <NavigationControl position="top-right" />
+                <NavigationControl position="bottom-right" />
             </Map>
         </div>
     );
