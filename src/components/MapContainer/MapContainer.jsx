@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import Map, { NavigationControl } from 'react-map-gl';
+import './MapContainer.css';
+
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 const MapboxAccessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
@@ -27,7 +29,6 @@ const MapContainer = () => {
                     latitude: 37.8,
                     zoom: 14
                 }}
-                style={{width: '100%', height: 400}}
                 mapStyle="mapbox://styles/mapbox/streets-v12"
                 mapboxAccessToken={MapboxAccessToken}
             >

@@ -1,7 +1,7 @@
 export const NavbarData = {
     navbarLinks: [
         { id: 1, name: "Platform", children: [
-            { id: 1.1, name: "WebGIS", href: "#webgis" },
+            { id: 1.1, name: "WebGIS", href: "/webgis" },
             { id: 1.2, name: "Mobile", href: "#mobile" },
             { id: 1.3, name: "Desktop", href: "#desktop" },
             { id: 1.4, name: "API", href: "#api" },
@@ -33,7 +33,7 @@ export const NavbarData = {
             { id: 6.2, name: "Sales", href: "#sales" },
             { id: 6.3, name: "General Inquiries", href: "#general-inquiries" }
         ] },
-        { id: 7, name: "Login", href: "#login" },
-        { id: 8, name: "Sign Up", href: "#sign-up" },
+        { id: 7, name: "Login", href: "/login" },
+        { id: 8, name: "Sign Up", href: "/signup" },
     ]
 };

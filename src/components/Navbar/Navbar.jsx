@@ -1,4 +1,6 @@
 import './Navbar.css'
+
+import { Link } from 'react-router-dom'
 import { NavbarData } from "./NavbarData.js"
 import Dropdown from './Dropdown/Dropdown.jsx'
 import { useState } from 'react'
@@ -29,7 +31,7 @@ const Navbar = () => {
                     {NavbarData.navbarLinks.map((item) => (
                         <li
                             key={item.id}
-                            className={`navbar-item relative group ${item.children ? "hover:bg-slate-200 transition" : ""}`}
+                            className={`navbar-item relative group ${item.children ? "hover:bg-white-200 transition" : ""}`}
                         >
                             {/* If item has children, render Dropdown component */}
                             {item.children ? (
@@ -39,13 +41,22 @@ const Navbar = () => {
                                     onToggle={() => handleDropdownToggle(item.id)} // Toggle open/close for this dropdown
                                 />
                             ) : (
-                                // If no children, render a simple link
-                                <a
-                                    href={item.href}
-                                    className="flex items-center gap-1 px-2 py-2 text-sm font-medium bg-slate-50 text-green-500 hover:text-slate-50 hover:bg-green-500 transition"
-                                >
-                                    {item.name}
-                                </a>
+                                // Use Link for internal routes, a for anchor links
+                                item.href.startsWith('/') ? (
+                                    <Link
+                                        to={item.href}
+                                        className="flex items-center gap-1 px-2 py-2 text-sm font-medium bg-white text-green-500 hover:text-white hover:bg-green-500 transition"
+                                    >
+                                        {item.name}
+                                    </Link>
+                                ) : (
+                                    <a
+                                        href={item.href}
+                                        className="flex items-center gap-1 px-2 py-2 text-sm font-medium bg-white text-green-500 hover:text-white hover:bg-green-500 transition"
+                                    >
+                                        {item.name}
+                                    </a>
+                                )
                             )}
                         </li>
                     ))}

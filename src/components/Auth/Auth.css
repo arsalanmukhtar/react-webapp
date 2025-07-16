@@ -1,0 +1,10 @@
+.auth-page-container {
+    position: absolute;
+    top: 50px; /* navbar height */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(100vh - 50px);
+    overflow: hidden; /* Prevent scroll on main canvas */
+    background: #f9fafb;
+}

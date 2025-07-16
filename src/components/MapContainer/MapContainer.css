@@ -1,0 +1,10 @@
+.map-container {
+    position: absolute;
+    top: 50px;           /* Start below the navbar */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    height: calc(100vh - 50px); /* Fill remaining space */
+    z-index: 0;
+}
