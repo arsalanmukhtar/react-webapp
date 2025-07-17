@@ -31,7 +31,7 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
             } else if (file.type.startsWith('image/')) {
                 reader.readAsDataURL(file);
             } else {
-                setNotification({ message: 'Unsupported file type. Please upload an SVG, PNG, or JPEG image.', type: 'error', visible: true });
+                setNotification('Unsupported file type. Please upload an SVG, PNG, or JPEG image.', 'error'); // Corrected call
                 setProfilePicFile(null);
                 setProfilePic('');
             }
@@ -48,14 +48,14 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
 
     const handleSubmitAccountSettings = async (e) => {
         if (e) e.preventDefault();
-        setNotification({ message: '', type: '', visible: false }); // Clear previous notification
+        setNotification('', ''); // Clear previous notification
 
         if (newPassword && newPassword !== confirmPassword) {
-            setNotification({ message: 'New passwords do not match.', type: 'error', visible: true });
+            setNotification('New passwords do not match.', 'error'); // Corrected call
             return;
         }
         if (newPassword && newPassword.length < 8) {
-            setNotification({ message: 'New password must be at least 8 characters long.', type: 'error', visible: true });
+            setNotification('New password must be at least 8 characters long.', 'error'); // Corrected call
             return;
         }
 
@@ -71,7 +71,7 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
         }
 
         if (Object.keys(updates).length === 0) {
-            setNotification({ message: 'No changes to save.', type: 'info', visible: true });
+            setNotification('No changes to save.', 'info'); // Corrected call
             return;
         }
 
@@ -88,17 +88,17 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
             if (res.ok) {
                 const data = await res.json();
                 updateUserProfile(data);
-                setNotification({ message: 'Account settings updated successfully!', type: 'success', visible: true });
+                setNotification('Account settings updated successfully!', 'success'); // Corrected call
                 setNewPassword('');
                 setConfirmPassword('');
                 setProfilePicFile(null);
             } else {
                 const errorData = await res.json();
-                setNotification({ message: errorData.detail || 'Failed to update account settings.', type: 'error', visible: true });
+                setNotification(errorData.detail || 'Failed to update account settings.', 'error'); // Corrected call
             }
         } catch (err) {
             console.error('Network or unexpected error:', err);
-            setNotification({ message: 'An unexpected error occurred while saving account settings.', type: 'error', visible: true });
+            setNotification('An unexpected error occurred while saving account settings.', 'error'); // Corrected call
         }
     };
 

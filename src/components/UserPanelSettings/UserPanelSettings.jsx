@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiUser, FiSettings } from 'react-icons/fi'; // FiSettings for Project Settings icon
+import { FiArrowLeft, FiUser, FiSettings, FiX } from 'react-icons/fi'; // Added FiX for the close icon
 import { useAuth } from '../../contexts/AuthContext';
 import UserSettings from './UserSettings/UserSettings'; // New import for UserSettings component
 // import ProjectSettings from './ProjectSettings/ProjectSettings'; // Placeholder for future component
@@ -41,8 +41,15 @@ const UserPanelSettings = () => {
             {/* Left Sidebar */}
             <div className="w-[400px] bg-white border-r border-gray-200 shadow-md p-2 flex flex-col justify-between">
                 <div>
-                    <div className="text-md font-semibold text-blue-500 mb-4 mt-2">
-                        {user?.full_name || user?.username}'s GeoPortal
+                    <div className="flex items-center justify-between mb-4 mt-2"> {/* Added flex for alignment */}
+                        <div className="text-md font-semibold text-blue-500">
+                            {user?.full_name || user?.username}'s GeoPortal
+                        </div>
+                        <FiX
+                            className="text-red-500 hover:text-red-700 cursor-pointer text-xl" // Styled cross icon
+                            onClick={() => navigate('/map-dashboard')}
+                            title="Close Settings" // Tooltip
+                        />
                     </div>
                     <div className="border-t border-gray-300 my-2"></div>
                     {/* Navigation links for parent settings */}
@@ -63,12 +70,7 @@ const UserPanelSettings = () => {
                         </button>
                     </nav>
                 </div>
-                <Link
-                    to="/map-dashboard"
-                    className="flex items-center text-green-500 hover:underline mt-4 mb-2"
-                >
-                    <FiArrowLeft className="mr-2" /> Back to Map
-                </Link>
+                {/* Removed the "Back to Map" button from here */}
             </div>
 
             {/* Right Content Area */}

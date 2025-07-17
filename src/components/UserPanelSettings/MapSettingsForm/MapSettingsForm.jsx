@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { FiSave } from 'react-icons/fi';
-import InsetMap from '../InsetMap/InsetMap'; // Updated path relative to MapSettingsForm
+import React, { useState, useEffect, useRef } from 'react'; // Import useRef for click outside
+import { FiSave, FiChevronDown } from 'react-icons/fi'; // Import FiChevronDown for the dropdown arrow
+import InsetMap from '../InsetMap/InsetMap';
 
 // Define Mapbox styles for dropdown
 const MapboxStyles = [
@@ -17,6 +17,8 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
     const [mapCenterLon, setMapCenterLon] = useState(user?.map_center_lon || 0.0);
     const [mapZoom, setMapZoom] = useState(user?.map_zoom || 2.0);
     const [mapTheme, setMapTheme] = useState(user?.map_theme || MapboxStyles[0].url);
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false); // State for custom dropdown
+    const dropdownRef = useRef(null); // Ref for custom dropdown
 
     // Update states when user data from context changes
     useEffect(() => {
@@ -28,6 +30,19 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
         }
     }, [user]);
 
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
+
     // Callback function to receive map changes from InsetMap
     const handleMapChange = (newCenter, newZoom) => {
         setMapCenterLat(newCenter.lat);
@@ -35,21 +50,26 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
         setMapZoom(newZoom);
     };
 
+    const handleThemeSelect = (url) => {
+        setMapTheme(url);
+        setIsDropdownOpen(false); // Close dropdown after selection
+    };
+
     const handleSubmitMapSettings = async (e) => {
         e.preventDefault();
-        setNotification({ message: '', type: '', visible: false }); // Clear previous notification
+        setNotification('', ''); // Clear previous notification
 
         // Basic validation for lat/lon
         if (isNaN(mapCenterLat) || mapCenterLat < -90 || mapCenterLat > 90) {
-            setNotification({ message: 'Latitude must be a number between -90 and 90.', type: 'error', visible: true });
+            setNotification('Latitude must be a number between -90 and 90.', 'error');
             return;
         }
         if (isNaN(mapCenterLon) || mapCenterLon < -180 || mapCenterLon > 180) {
-            setNotification({ message: 'Longitude must be a number between -180 and 180.', type: 'error', visible: true });
+            setNotification('Longitude must be a number between -180 and 180.', 'error');
             return;
         }
         if (isNaN(mapZoom) || mapZoom < 0 || mapZoom > 22) {
-            setNotification({ message: 'Zoom must be a number between 0 and 22.', type: 'error', visible: true });
+            setNotification('Zoom must be a number between 0 and 22.', 'error');
             return;
         }
 
@@ -68,7 +88,7 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
         }
 
         if (Object.keys(updates).length === 0) {
-            setNotification({ message: 'No changes to save.', type: 'info', visible: true });
+            setNotification('No changes to save.', 'info');
             return;
         }
 
@@ -85,20 +105,22 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
             if (res.ok) {
                 const data = await res.json();
                 updateMapSettings(data);
-                setNotification({ message: 'Map settings updated successfully!', type: 'success', visible: true });
+                setNotification('Map settings updated successfully!', 'success');
             } else {
                 const errorData = await res.json();
-                setNotification({ message: errorData.detail || 'Failed to update map settings.', type: 'error', visible: true });
+                setNotification(errorData.detail || 'Failed to update map settings.', 'error');
             }
         } catch (err) {
             console.error('Network or unexpected error:', err);
-            setNotification({ message: 'An unexpected error occurred. Please try again.', type: 'error', visible: true });
+            setNotification('An unexpected error occurred. Please try again.', 'error');
         }
     };
 
+    const selectedThemeName = MapboxStyles.find(style => style.url === mapTheme)?.name || 'Select a theme';
+
     return (
         <form onSubmit={handleSubmitMapSettings} className="flex flex-col h-full">
-            <div className="flex-1 overflow-y-auto space-y-6 pb-4"> {/* Content area with scroll */}
+            <div className="flex-1 overflow-y-auto space-y-6 pb-4">
                 {/* Inset Map Component */}
                 <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Map Preview</label>
@@ -151,22 +173,38 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
                     </div>
                 </div>
 
-                {/* Map Theme Dropdown */}
-                <div>
+                {/* Custom Map Theme Dropdown */}
+                <div className="relative" ref={dropdownRef}>
                     <label htmlFor="mapTheme" className="block text-sm font-medium text-gray-700">Map Theme</label>
-                    <select
+                    <button
+                        type="button"
                         id="mapTheme"
-                        className="w-full px-4 py-2 border border-zinc-300 rounded-md map-theme-select
-                      focus:outline-none focus:border-green-500 hover:border-green-500 active:border-green-800 hover:cursor-pointer"
-                        value={mapTheme}
-                        onChange={(e) => setMapTheme(e.target.value)}
+                        className="w-full flex items-center justify-between px-3 py-2 border border-zinc-300 rounded-md shadow-sm
+                                   bg-white text-gray-700 text-sm font-normal cursor-pointer
+                                   focus:outline-none focus:border-green-500 hover:border-green-500 active:border-green-800 transition-colors duration-200"
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                     >
-                        {MapboxStyles.map((style) => (
-                            <option key={style.url} value={style.url}>
-                                {style.name}
-                            </option>
-                        ))}
-                    </select>
+                        {selectedThemeName}
+                        <FiChevronDown className={`w-4 h-4 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {isDropdownOpen && (
+                        <div className="absolute left-0 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                            <ul className="py-1 px-1 space-y-1">
+                                {MapboxStyles.map((style) => (
+                                    <li key={style.url}>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleThemeSelect(style.url)}
+                                            className="block w-full text-left px-2 py-2 text-sm font-normal text-gray-700 hover:bg-green-50 hover:text-green-500 transition-colors duration-200 rounded-md"
+                                        >
+                                            {style.name}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </div>
             </div> {/* End of scrollable content div */}
 
