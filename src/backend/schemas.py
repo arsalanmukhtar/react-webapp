@@ -16,9 +16,9 @@ class UserCreate(UserBase):
     password: str = Field(..., min_length=8)  # Ensure password has a minimum length
 
 
-class UserLogin(UserBase):
-    """Schema for user login."""
-
+class UserLogin(BaseModel): # Changed to inherit directly from BaseModel
+    """Schema for user login using username and password."""
+    username: str # Added username field
     password: str
 
 
@@ -48,7 +48,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     """Schema for data contained within a JWT token."""
 
-    email: Optional[str] = None
+    username: Optional[str] = None # Changed from email to username
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -62,3 +62,4 @@ class ResetPasswordRequest(BaseModel):
 
     token: str
     new_password: str = Field(..., min_length=8)
+

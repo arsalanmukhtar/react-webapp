@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta, timezone
@@ -20,6 +19,7 @@ from .auth import (
     create_access_token,
     send_password_reset_email,
     generate_reset_token,
+    authenticate_user
 )
 from .config import settings
 
@@ -59,10 +59,10 @@ async def signup(user: UserCreate, db: Session = Depends(get_db)):
     # Create a new User object, including the username
     new_user = User(
         email=user.email,
-        username=user.username,  # Added username
+        username=user.username,
         hashed_password=hashed_password,
-        is_active=True,  # User is active by default upon signup
-        is_verified=False,  # Email verification can be added later
+        is_active=True,
+        is_verified=False,
     )
 
     try:
@@ -84,23 +84,23 @@ async def signup(user: UserCreate, db: Session = Depends(get_db)):
         )
 
 
-@router.post("/token", response_model=Token)
+@router.post("/login", response_model=Token)
 async def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+    user_login: UserLogin,
+    db: Session = Depends(get_db)
 ):
     """
     Authenticates a user and returns an access token upon successful login.
-    - Verifies email and password.
+    - Accepts username and password in the request body.
+    - Verifies username and password.
     - Generates a JWT token.
     """
-    # OAuth2PasswordRequestForm provides 'username' and 'password' fields.
-    # We map 'username' to our 'email' field.
-    user = db.query(User).filter(User.email == form_data.username).first()
+    user = authenticate_user(db, user_login.username, user_login.password)
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     if not user.is_active:
@@ -110,7 +110,7 @@ async def login_for_access_token(
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
+        data={"sub": user.username}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -127,30 +127,28 @@ async def forgot_password(
     """
     user = db.query(User).filter(User.email == request.email).first()
 
-    if not user:
-        # For security, return a generic success message even if email not found
-        # to prevent email enumeration.
+    if user:
+        # Generate a unique reset token
+        reset_token = generate_reset_token()
+        # Set token expiry (e.g., 1 hour from now)
+        reset_token_expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        user.reset_token = reset_token
+        user.reset_token_expires_at = reset_token_expires_at
+        db.commit()
+        db.refresh(user)
+
+        # Send the password reset email
+        await send_password_reset_email(user.email, reset_token)
+        # Return success message for existing email
+        return {"message": "Password reset email has been sent."}
+    else:
+        # Return a specific message for non-existent email
         print(f"Attempted password reset for non-existent email: {request.email}")
-        return {
-            "message": "If an account with that email exists, a password reset link has been sent."
-        }
-
-    # Generate a unique reset token
-    reset_token = generate_reset_token()
-    # Set token expiry (e.g., 1 hour from now)
-    reset_token_expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
-
-    user.reset_token = reset_token
-    user.reset_token_expires_at = reset_token_expires_at
-    db.commit()
-    db.refresh(user)
-
-    # Send the password reset email
-    await send_password_reset_email(user.email, reset_token)
-
-    return {
-        "message": "If an account with that email exists, a password reset link has been sent."
-    }
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Email not found."
+        )
 
 
 @router.post(
@@ -169,11 +167,9 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired token."
         )
 
-    # Check if the token has expired
     if user.reset_token_expires_at and user.reset_token_expires_at < datetime.now(
         timezone.utc
     ):
-        # Clear the expired token
         user.reset_token = None
         user.reset_token_expires_at = None
         db.commit()
@@ -181,9 +177,7 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired token."
         )
 
-    # Hash the new password
     user.hashed_password = get_password_hash(request.new_password)
-    # Clear the reset token and its expiry after successful reset
     user.reset_token = None
     user.reset_token_expires_at = None
 

@@ -16,13 +16,6 @@ if (!MapboxAccessToken) {
 const MapContainer = () => {
     const [message, setMessage] = useState('');
 
-    useEffect(() => {
-        fetch('/api/hello')
-            .then(res => res.json())
-            .then(data => setMessage(data.message))
-            .catch(err => setMessage('Error fetching message'));
-    }, []);
-
     const mapRef = useRef();
 
     // Handlers for custom controls

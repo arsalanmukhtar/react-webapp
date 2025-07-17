@@ -2,8 +2,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer  # Ensure this is imported
+from fastapi import Depends, HTTPException, status, Request, Header
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from email_validator import validate_email, EmailNotValidError # type: ignore[import-untyped]
 import aiosmtplib # type: ignore[import-untyped]
@@ -21,7 +21,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Explicitly define tokenUrl to the *absolute* path of your token endpoint
 # and scheme_name for better display in Swagger UI.
 oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/auth/token", scheme_name="Bearer Token Login"
+    tokenUrl="/auth/login", scheme_name="Bearer Token Login"
 )
 
 
@@ -57,33 +57,70 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
+def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
+    """
+    Authenticates a user by username and password.
+    """
+    user = db.query(User).filter(User.username == username).first()
+    if not user or not verify_password(password, user.hashed_password):
+        return None
+    return user
+
+
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
 ) -> User:
     """
     Dependency to get the current authenticated user from a JWT token.
     Raises HTTPException if the token is invalid or user not found/inactive.
     """
+    print("--- Entering get_current_user (Manual Header Extraction) ---")
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    if authorization is None:
+        print("Authorization header is missing.")
+        raise credentials_exception
+
     try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            print(f"Authorization scheme is not 'Bearer': {scheme}")
+            raise credentials_exception
+    except ValueError:
+        print(f"Authorization header malformed: {authorization}")
+        raise credentials_exception
+
+    try:
+        print(f"Received token in get_current_user: {token}")
+
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
-        email: str = payload.get("sub")
-        if email is None:
+        username: str = payload.get("sub")
+        if username is None:
+            print("JWT payload 'sub' (username) is None.")
             raise credentials_exception
-        token_data = TokenData(email=email)
-    except JWTError:
+        token_data = TokenData(username=username)
+    except JWTError as e:
+        print(f"JWT Error during token decoding: {e}")
+        raise credentials_exception
+    except Exception as e:
+        print(f"Unexpected error in get_current_user: {e}")
         raise credentials_exception
 
-    user = db.query(User).filter(User.email == token_data.email).first()
+
+    user = db.query(User).filter(User.username == token_data.username).first()
     if user is None:
+        print(f"User with username '{token_data.username}' not found in DB.")
         raise credentials_exception
     if not user.is_active:
+        print(f"User '{token_data.username}' is inactive.")
         raise HTTPException(status_code=400, detail="Inactive user")
     return user
 
@@ -97,33 +134,37 @@ async def send_password_reset_email(email: str, reset_token: str):
     except EmailNotValidError:
         raise HTTPException(status_code=400, detail="Invalid email format")
 
-    # In a real application, you would link to your frontend's password reset page
-    # e.g., f"http://localhost:3000/reset-password?token={reset_token}"
-    reset_link = f"http://localhost:8000/auth/reset-password?token={reset_token}"  # Corrected path to match auth_routes.py
+    # Updated base URL for the reset link
+    reset_link = f"http://rahmeassociates.au/auth/reset-password?token={reset_token}"
+
+    # Updated sender name and email address for the 'From' header
+    sender_email_address = "noreply@rahmeassociates.com"
+    sender_display_name = "Rahme & Associates"
 
     message = f"""\
-    Subject: Password Reset Request
+From: "{sender_display_name}" <{sender_email_address}>
+Subject: Password Reset Request
 
-    Hi,
+Hi,
 
-    You have requested to reset your password.
-    Please click on the following link to reset your password:
-    {reset_link}
+You have requested to reset your password.
+Please click on the following link to reset your password:
+{reset_link}
 
-    This link will expire in 1 hour.
+This link will expire in 1 hour.
 
-    If you did not request a password reset, please ignore this email.
+If you did not request a password reset, please ignore this email.
 
-    Thanks,
-    Your App Team
-    """
+Thanks,
+{sender_display_name}
+"""
 
     try:
         async with aiosmtplib.SMTP(
             hostname=settings.SMTP_SERVER, port=settings.SMTP_PORT, start_tls=True
         ) as client:
             await client.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-            await client.sendmail(settings.SMTP_USERNAME, email, message)
+            await client.sendmail(sender_email_address, email, message)
     except Exception as e:
         print(f"Error sending email: {e}")
         raise HTTPException(
