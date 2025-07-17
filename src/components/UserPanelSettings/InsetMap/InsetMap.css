@@ -1,0 +1,30 @@
+/* CSS for InsetMap component */
+
+/* Mapbox Navigation Control size */
+.mapboxgl-ctrl-group button {
+    width: 24px !important; /* Smaller width */
+    height: 24px !important; /* Smaller height */
+    line-height: 24px !important; /* Adjust line height for icon centering */
+    font-size: 14px !important; /* Smaller icon size if text-based */
+}
+
+.mapboxgl-ctrl-group button + button {
+    border-top: 1px solid rgba(0, 0, 0, 0.1) !important; /* Adjust border for stacked buttons */
+}
+
+/* Adjust padding/margin of the control itself if needed */
+.mapboxgl-ctrl-top-right .mapboxgl-ctrl,
+.mapboxgl-ctrl-top-left .mapboxgl-ctrl {
+    margin: 5px !important; /* Smaller margin around the control group */
+}
+
+.mapboxgl-ctrl-geocoder, .mapboxgl-ctrl-geocoder--input {
+    font-size: 13px;
+    font-family: "Josefin Sans", sans-serif;
+}
+
+.mapboxgl-ctrl-geocoder--input:focus, .mapboxgl-ctrl-geocoder--input:active {
+    outline: none;
+    box-shadow: none;
+    border: none;
+}   

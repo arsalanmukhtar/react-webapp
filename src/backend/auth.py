@@ -134,8 +134,8 @@ async def send_password_reset_email(email: str, reset_token: str):
     except EmailNotValidError:
         raise HTTPException(status_code=400, detail="Invalid email format")
 
-    # Updated base URL for the reset link
-    reset_link = f"http://rahmeassociates.au/auth/reset-password?token={reset_token}"
+    # The email link now points to the backend redirect endpoint on localhost:8000
+    reset_link = f"http://localhost:8000/api/auth/redirect-reset-password?token={reset_token}"
 
     # Updated sender name and email address for the 'From' header
     sender_email_address = "noreply@rahmeassociates.com"

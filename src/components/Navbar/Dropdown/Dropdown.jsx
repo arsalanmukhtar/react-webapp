@@ -23,7 +23,7 @@ const Dropdown = ({ item, isOpen, onToggle }) => {
                                 {child.href.startsWith('/') ? (
                                     <Link
                                         to={child.href}
-                                        className="block px-2 py-2 text-sm font-normal text-gray-700 hover:bg-green-50 hover:text-green-500 transition-colors duration-200"
+                                        className="block px-2 py-2 text-sm font-normal text-gray-700 hover:bg-green-0 hover:text-green-500 transition-colors duration-200"
                                         onClick={onToggle}
                                     >
                                         {child.name}

@@ -84,9 +84,9 @@ app.add_middleware(
 
 # --- Include Routers ---
 # Include the authentication routes under the /auth prefix
-app.include_router(auth_router)
+app.include_router(auth_router, prefix="/api")
 # Include the data routes under the /data prefix
-app.include_router(data_router)
+app.include_router(data_router, prefix="/api")
 
 
 # You can add a simple root endpoint if desired

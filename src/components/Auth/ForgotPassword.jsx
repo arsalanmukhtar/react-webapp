@@ -3,10 +3,32 @@ import { Link } from 'react-router-dom';
 
 const ForgotPassword = () => {
     const [email, setEmail] = useState('');
+    const [message, setMessage] = useState(''); // To display success or error messages
+    const [error, setError] = useState(''); // To display specific error messages
 
-    const handleReset = (e) => {
+    const handleReset = async (e) => {
         e.preventDefault();
-        console.log('Sending password reset link to:', email);
+        setMessage(''); // Clear previous messages
+        setError(''); // Clear previous errors
+
+        try {
+            const res = await fetch('/api/auth/forgot-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setMessage(data.message); // Display the success message from the backend
+            } else {
+                const errorData = await res.json();
+                setError(errorData.detail || 'Failed to send reset link. Please try again.'); // Display specific error or generic
+            }
+        } catch (err) {
+            console.error('Network or unexpected error:', err);
+            setError('An unexpected error occurred. Please try again.');
+        }
     };
 
     return (
@@ -27,6 +49,13 @@ const ForgotPassword = () => {
                             onChange={(e) => setEmail(e.target.value)}
                         />
                     </div>
+
+                    {message && (
+                        <p className="text-green-600 text-sm text-center">{message}</p>
+                    )}
+                    {error && (
+                        <p className="text-red-500 text-sm text-center">{error}</p>
+                    )}
 
                     <button
                         type="submit"

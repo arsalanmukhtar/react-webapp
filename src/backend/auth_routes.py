@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse # Import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta, timezone
@@ -149,6 +150,17 @@ async def forgot_password(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Email not found."
         )
+
+
+@router.get("/redirect-reset-password") # New endpoint for redirection
+async def redirect_reset_password(token: str):
+    """
+    Redirects the user from the email link to the frontend's reset password page.
+    This allows the email to contain a production-like URL while redirecting
+    to the local development frontend for handling.
+    """
+    frontend_reset_url = f"http://localhost:5173/reset-password?token={token}"
+    return RedirectResponse(url=frontend_reset_url, status_code=status.HTTP_302_FOUND)
 
 
 @router.post(

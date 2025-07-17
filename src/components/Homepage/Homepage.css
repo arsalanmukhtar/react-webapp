@@ -1,0 +1,31 @@
+.homepage-container {
+    position: absolute; /* Use absolute positioning */
+    top: 50px; /* Start right after the navbar */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Center horizontally */
+    justify-content: center; /* Center vertically */
+    width: 100%; /* Ensure full width */
+    height: calc(100vh - 50px); /* Full viewport height minus 50px for navbar */
+    background-color: #f7fafc; /* Tailwind gray-50 */
+    color: #2d3748; /* Tailwind gray-800 */
+    box-sizing: border-box; /* Include padding in width/height calculation */
+    overflow: hidden; /* Prevent scrolling */
+}
+
+.homepage-title {
+    font-size: 3rem; /* text-5xl */
+    font-weight: 700; /* font-bold */
+    margin-bottom: 1rem;
+    color: #4a5568; /* Tailwind gray-700 */
+    text-align: center; /* Keep title centered */
+}
+
+.homepage-subtitle {
+    font-size: 1.25rem; /* text-xl */
+    color: #718096; /* Tailwind gray-600 */
+    text-align: center; /* Keep subtitle centered */
+}

@@ -2,14 +2,60 @@ import './Auth.css';
 
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext'; // Corrected import path
+import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
-    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState(''); // Changed from email to username
     const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const { login } = useAuth();
+    const navigate = useNavigate();
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        console.log('Logging in with:', email, password);
+        setError('');
+
+        try {
+            const loginRes = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            if (loginRes.ok) {
+                const data = await loginRes.json();
+                const accessToken = data.access_token;
+                console.log('Login successful! Access Token:', accessToken);
+
+                login(accessToken);
+
+                const userMeRes = await fetch('/api/data/users/me', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+
+                if (userMeRes.ok) {
+                    const userData = await userMeRes.json();
+                    console.log('Successfully fetched user data from /api/data/users/me:', userData);
+                    navigate('/map-dashboard');
+                } else {
+                    console.error('Failed to fetch user data from /api/data/users/me');
+                    setError('Login successful, but failed to retrieve user profile.');
+                }
+
+            } else {
+                const errorData = await loginRes.json();
+                console.error('Login failed:', errorData.detail || 'Unknown error');
+                setError(errorData.detail || 'Login failed. Please check your credentials.');
+            }
+        } catch (err) {
+            console.error('Network or unexpected error during login:', err);
+            setError('An unexpected error occurred. Please try again.');
+        }
     };
 
     return (
@@ -18,21 +64,21 @@ const Login = () => {
                 <h1 className="text-3xl font-semibold text-zinc-800 mb-6">Log in</h1>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
-                    {/* Email */}
+                    {/* Username */}
                     <div>
-                        <label htmlFor="email" className="block text-sm font-medium text-zinc-700 mb-1">
-                            Email address
+                        <label htmlFor="username" className="block text-sm font-medium text-zinc-700 mb-1">
+                            Username
                         </label>
                         <input
-                            type="email"
-                            id="email"
+                            type="text"
+                            id="username" // Changed id to username
                             required
                             className="w-full px-4 py-2 border border-zinc-300 rounded-md shadow-sm placeholder-zinc-400
                 focus:outline-none focus:border-green-500 focus:ring-0
                 hover:border-green-500 active:border-green-400"
-                            placeholder="you@example.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="your username" // Updated placeholder
+                            value={username} // Using username state
+                            onChange={(e) => setUsername(e.target.value)} // Updated onChange
                         />
                     </div>
 
@@ -61,6 +107,11 @@ const Login = () => {
                             onChange={(e) => setPassword(e.target.value)}
                         />
                     </div>
+
+                    {/* Display error message if any */}
+                    {error && (
+                        <p className="text-red-500 text-sm text-center">{error}</p>
+                    )}
 
                     {/* Submit */}
                     <button
