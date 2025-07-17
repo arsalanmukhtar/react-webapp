@@ -5,9 +5,9 @@ import { useAuth } from '../contexts/AuthContext'; // Adjust path if needed
 const PrivateRoute = ({ children }) => {
     const { isAuthenticated } = useAuth();
 
-    // Redirect to the homepage (/) if not authenticated
-    // The homepage is a public route, so this will work correctly.
-    return isAuthenticated ? children : <Navigate to="/" replace />;
+    // Redirect to the login page (/login) if not authenticated
+    // This ensures protected routes require authentication and send unauthenticated users to login.
+    return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
 export default PrivateRoute;

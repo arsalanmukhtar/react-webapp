@@ -1,131 +1,185 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiUser, FiMap } from 'react-icons/fi';
-import { useAuth } from '../../../contexts/AuthContext';
-import AccountSettingsForm from '../AccountSettingsForm/AccountSettingsForm'; // Updated import path
-import MapSettingsForm from '../MapSettingsForm/MapSettingsForm';     // Updated import path
+import { FiSave } from 'react-icons/fi';
+import InsetMap from '../InsetMap/InsetMap'; // Updated path relative to MapSettingsForm
 
-const UserPanelSettings = () => {
-    const { user, token, updateUserProfile, updateMapSettings } = useAuth();
-    const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState('account');
-    // Initial state for notification: not visible, positioned off-screen above
-    const [notification, setNotification] = useState({ message: '', type: '', visible: false, translateY: '-full' });
+// Define Mapbox styles for dropdown
+const MapboxStyles = [
+    { name: "Streets", url: "mapbox://styles/mapbox/streets-v11" },
+    { name: "Outdoors", url: "mapbox://styles/mapbox/outdoors-v11" },
+    { name: "Light", url: "mapbox://styles/mapbox/light-v10" },
+    { name: "Dark", url: "mapbox://styles/mapbox/dark-v10" },
+    { name: "Satellite", url: "mapbox://styles/mapbox/satellite-v9" },
+    { name: "Satellite Streets", url: "mapbox://styles/mapbox/satellite-streets-v11" },
+];
 
-    // Effect to auto-hide notification after 3 seconds with animation
+const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) => {
+    const [mapCenterLat, setMapCenterLat] = useState(user?.map_center_lat || 0.0);
+    const [mapCenterLon, setMapCenterLon] = useState(user?.map_center_lon || 0.0);
+    const [mapZoom, setMapZoom] = useState(user?.map_zoom || 2.0);
+    const [mapTheme, setMapTheme] = useState(user?.map_theme || MapboxStyles[0].url);
+
+    // Update states when user data from context changes
     useEffect(() => {
-        let timer;
-        if (notification.visible) {
-            // Set a timeout to start sliding out after 2.5 seconds (allowing 0.5s for initial slide-in)
-            timer = setTimeout(() => {
-                setNotification(prev => ({ ...prev, translateY: '-full' })); // Start slide-out animation
-            }, 2500); // Start sliding out after 2.5 seconds
-
-            // Set another timeout to completely hide the notification after 3 seconds (2.5s + 0.5s animation duration)
-            const hideTimer = setTimeout(() => {
-                setNotification(prev => ({ ...prev, visible: false, message: '' })); // Fully hide and clear message
-            }, 3000); // Total 3 seconds until fully hidden
-
-            return () => {
-                clearTimeout(timer);
-                clearTimeout(hideTimer);
-            };
+        if (user) {
+            setMapCenterLat(user.map_center_lat || 0.0);
+            setMapCenterLon(user.map_center_lon || 0.0);
+            setMapZoom(user.map_zoom || 2.0);
+            setMapTheme(user.map_theme || MapboxStyles[0].url);
         }
-    }, [notification.visible, notification.message]); // Depend on message to re-trigger if message changes while visible
+    }, [user]);
 
-    // Function to show notification with slide-in animation
-    const showNotification = (message, type) => {
-        setNotification({ message, type, visible: true, translateY: '0' }); // Slide in
+    // Callback function to receive map changes from InsetMap
+    const handleMapChange = (newCenter, newZoom) => {
+        setMapCenterLat(newCenter.lat);
+        setMapCenterLon(newCenter.lng);
+        setMapZoom(newZoom);
+    };
+
+    const handleSubmitMapSettings = async (e) => {
+        e.preventDefault();
+        setNotification({ message: '', type: '', visible: false }); // Clear previous notification
+
+        // Basic validation for lat/lon
+        if (isNaN(mapCenterLat) || mapCenterLat < -90 || mapCenterLat > 90) {
+            setNotification({ message: 'Latitude must be a number between -90 and 90.', type: 'error', visible: true });
+            return;
+        }
+        if (isNaN(mapCenterLon) || mapCenterLon < -180 || mapCenterLon > 180) {
+            setNotification({ message: 'Longitude must be a number between -180 and 180.', type: 'error', visible: true });
+            return;
+        }
+        if (isNaN(mapZoom) || mapZoom < 0 || mapZoom > 22) {
+            setNotification({ message: 'Zoom must be a number between 0 and 22.', type: 'error', visible: true });
+            return;
+        }
+
+        const updates = {};
+        if (mapCenterLat !== user?.map_center_lat) {
+            updates.map_center_lat = mapCenterLat;
+        }
+        if (mapCenterLon !== user?.map_center_lon) {
+            updates.map_center_lon = mapCenterLon;
+        }
+        if (mapZoom !== user?.map_zoom) {
+            updates.map_zoom = mapZoom;
+        }
+        if (mapTheme !== user?.map_theme) {
+            updates.map_theme = mapTheme;
+        }
+
+        if (Object.keys(updates).length === 0) {
+            setNotification({ message: 'No changes to save.', type: 'info', visible: true });
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/data/users/me/settings/map', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(updates)
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                updateMapSettings(data);
+                setNotification({ message: 'Map settings updated successfully!', type: 'success', visible: true });
+            } else {
+                const errorData = await res.json();
+                setNotification({ message: errorData.detail || 'Failed to update map settings.', type: 'error', visible: true });
+            }
+        } catch (err) {
+            console.error('Network or unexpected error:', err);
+            setNotification({ message: 'An unexpected error occurred. Please try again.', type: 'error', visible: true });
+        }
     };
 
     return (
-        <div className="absolute top-[50px] left-0 right-0 bottom-0 flex bg-gray-50 overflow-hidden">
-            {/* Left Sidebar */}
-            <div className="w-[400px] bg-white border-r border-gray-200 shadow-md p-2 flex flex-col justify-between">
+        <form onSubmit={handleSubmitMapSettings} className="flex flex-col h-full">
+            <div className="flex-1 overflow-y-auto space-y-6 pb-4"> {/* Content area with scroll */}
+                {/* Inset Map Component */}
+                <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Map Preview</label>
+                    <InsetMap
+                        initialCenter={[mapCenterLon, mapCenterLat]}
+                        initialZoom={mapZoom}
+                        onMapChange={({ latitude, longitude, zoom }) => handleMapChange({ lat: latitude, lng: longitude }, zoom)}
+                    />
+                </div>
+
+                {/* Map Center Lat, Lon, and Zoom in one row */}
+                <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0">
+                    {/* Map Center Lat Label */}
+                    <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Map Center Latitude</label>
+                        <input
+                            type="number"
+                            id="mapCenterLat"
+                            step="any"
+                            className="mt-1 block w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm placeholder-zinc-400 focus:outline-none focus:border-green-500"
+                            value={mapCenterLat}
+                            onChange={(e) => setMapCenterLat(parseFloat(e.target.value))}
+                        />
+                    </div>
+
+                    {/* Map Center Lon Label */}
+                    <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Map Center Longitude</label>
+                        <input
+                            type="number"
+                            id="mapCenterLon"
+                            step="any"
+                            className="mt-1 block w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm placeholder-zinc-400 focus:outline-none focus:border-green-500"
+                            value={mapCenterLon}
+                            onChange={(e) => setMapCenterLon(parseFloat(e.target.value))}
+                        />
+                    </div>
+
+                    {/* Map Zoom Label */}
+                    <div className="flex-1">
+                        <label htmlFor="mapZoom" className="block text-sm font-medium text-gray-700 mb-1">Map Zoom Level</label>
+                        <input
+                            type="number"
+                            id="mapZoom"
+                            step="0.1"
+                            className="mt-1 block w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm placeholder-zinc-400 focus:outline-none focus:border-green-500"
+                            value={mapZoom}
+                            onChange={(e) => setMapZoom(parseFloat(e.target.value))}
+                        />
+                    </div>
+                </div>
+
+                {/* Map Theme Dropdown */}
                 <div>
-                    <div className="text-md font-semibold text-blue-500 mb-4 mt-2">
-                        {user?.full_name || user?.username}'s GeoPortal
-                    </div>
-                    <div className="border-t border-gray-300 my-2"></div>
-                    {/* Navigation links for settings */}
-                    <nav className="space-y-1">
-                        <button
-                            onClick={() => setActiveTab('account')}
-                            className={`flex items-center w-full px-3 py-1.5 rounded-md text-left text-sm font-medium transition-colors duration-200
-                                ${activeTab === 'account' ? 'bg-green-500 text-white' : 'text-gray-700 hover:bg-green-50 hover:text-green-500'}`}
-                        >
-                            <FiUser className="mr-2" /> Account Settings
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('map')}
-                            className={`flex items-center w-full px-3 py-1.5 rounded-md text-left text-sm font-medium transition-colors duration-200
-                                ${activeTab === 'map' ? 'bg-green-500 text-white' : 'text-gray-700 hover:bg-green-50 hover:text-green-500'}`}
-                        >
-                            <FiMap className="mr-2" /> Map Settings
-                        </button>
-                    </nav>
+                    <label htmlFor="mapTheme" className="block text-sm font-medium text-gray-700">Map Theme</label>
+                    <select
+                        id="mapTheme"
+                        className="w-full px-4 py-2 border border-zinc-300 rounded-md map-theme-select
+                      focus:outline-none focus:border-green-500 hover:border-green-500 active:border-green-800 hover:cursor-pointer"
+                        value={mapTheme}
+                        onChange={(e) => setMapTheme(e.target.value)}
+                    >
+                        {MapboxStyles.map((style) => (
+                            <option key={style.url} value={style.url}>
+                                {style.name}
+                            </option>
+                        ))}
+                    </select>
                 </div>
-                <Link
-                    to="/map-dashboard"
-                    className="flex items-center text-green-500 hover:underline mt-4 mb-2"
-                >
-                    <FiArrowLeft className="mr-2" /> Back to Map
-                </Link>
-            </div>
+            </div> {/* End of scrollable content div */}
 
-            {/* Right Content Area */}
-            <div className="flex-1 p-4 overflow-y-auto">
-                <div className="bg-white border border-gray-200 shadow-lg rounded-xl p-4 relative">
-                    {/* Tabs for Account Settings and Map Settings */}
-                    <div className="flex border-b border-gray-200 mb-4">
-                        <button
-                            onClick={() => setActiveTab('account')}
-                            className={`px-4 py-2 text-lg font-semibold border-b-2 ${activeTab === 'account' ? 'border-green-500 text-green-500' : 'border-transparent text-gray-700 hover:text-gray-700'}`}
-                        >
-                            Account Settings
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('map')}
-                            className={`ml-4 px-4 py-2 text-lg font-semibold border-b-2 ${activeTab === 'map' ? 'border-green-500 text-green-500' : 'border-transparent text-gray-700 hover:text-gray-700'}`}
-                        >
-                            Map Settings
-                        </button>
-                    </div>
-
-                    {/* Consolidated Message Display at the top center of the main container */}
-                    {notification.visible && (
-                        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 p-3 rounded-md shadow-lg text-sm transition-transform duration-500 ease-out
-                                ${notification.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' :
-                                notification.type === 'error' ? 'bg-red-100 text-red-800 border border-red-300' :
-                                    'bg-blue-100 text-blue-800 border border-blue-300'}
-                                transform ${notification.translateY === '0' ? 'translate-y-0' : '-translate-y-full'}
-                                `}>
-                            <p className="text-center">{notification.message}</p>
-                        </div>
-                    )}
-
-                    {/* Render active tab content */}
-                    {activeTab === 'account' && (
-                        <AccountSettingsForm
-                            user={user}
-                            token={token}
-                            updateUserProfile={updateUserProfile}
-                            setNotification={showNotification} // Pass the new showNotification function
-                        />
-                    )}
-
-                    {activeTab === 'map' && (
-                        <MapSettingsForm
-                            user={user}
-                            token={token}
-                            updateMapSettings={updateMapSettings}
-                            setNotification={showNotification} // Pass the new showNotification function
-                        />
-                    )}
-                </div>
-            </div>
-        </div>
+            <button
+                type="submit"
+                className="w-full bg-green-500 text-white py-2 px-4 rounded-md border border-green-400
+                    hover:bg-green-400 hover:border-green-800 focus:outline-none focus:border-green-500
+                    active:border-green-800 hover:cursor-pointer flex items-center justify-center"
+            >
+                <FiSave className="mr-2" /> Save Map Settings
+            </button>
+        </form>
     );
 };
 
-export default UserPanelSettings;
+export default MapSettingsForm;
