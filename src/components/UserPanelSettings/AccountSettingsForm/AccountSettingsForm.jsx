@@ -31,7 +31,7 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
             } else if (file.type.startsWith('image/')) {
                 reader.readAsDataURL(file);
             } else {
-                setNotification('Unsupported file type. Please upload an SVG, PNG, or JPEG image.', 'error'); // Corrected call
+                setNotification('Unsupported file type. Please upload an SVG, PNG, or JPEG image.', 'error');
                 setProfilePicFile(null);
                 setProfilePic('');
             }
@@ -51,11 +51,11 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
         setNotification('', ''); // Clear previous notification
 
         if (newPassword && newPassword !== confirmPassword) {
-            setNotification('New passwords do not match.', 'error'); // Corrected call
+            setNotification('New passwords do not match.', 'error');
             return;
         }
         if (newPassword && newPassword.length < 8) {
-            setNotification('New password must be at least 8 characters long.', 'error'); // Corrected call
+            setNotification('New password must be at least 8 characters long.', 'error');
             return;
         }
 
@@ -71,7 +71,7 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
         }
 
         if (Object.keys(updates).length === 0) {
-            setNotification('No changes to save.', 'info'); // Corrected call
+            setNotification('No changes to save.', 'info');
             return;
         }
 
@@ -88,17 +88,17 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
             if (res.ok) {
                 const data = await res.json();
                 updateUserProfile(data);
-                setNotification('Account settings updated successfully!', 'success'); // Corrected call
+                setNotification('Account settings updated successfully!', 'success');
                 setNewPassword('');
                 setConfirmPassword('');
                 setProfilePicFile(null);
             } else {
                 const errorData = await res.json();
-                setNotification(errorData.detail || 'Failed to update account settings.', 'error'); // Corrected call
+                setNotification(errorData.detail || 'Failed to update account settings.', 'error');
             }
         } catch (err) {
             console.error('Network or unexpected error:', err);
-            setNotification('An unexpected error occurred while saving account settings.', 'error'); // Corrected call
+            setNotification('An unexpected error occurred while saving account settings.', 'error');
         }
     };
 
@@ -181,6 +181,7 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
                         id="profilePicUpload"
                         accept="image/svg+xml,image/png,image/jpeg"
                         onChange={handleProfilePicChange}
+                        key={profilePic} // Added key prop to force re-render and reset input
                         className="block w-full text-sm text-gray-500
                         file:mr-4 file:py-2 file:px-4
                         file:rounded-md file:border-0
