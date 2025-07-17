@@ -1,8 +1,8 @@
 export const NavbarData = {
     navbarLinks: [
         { id: 1, name: "Platform", children: [
-            { id: 1.1, name: "Map Dashboard", href: "/map-dashboard" },
-            { id: 1.2, name: "Mobile", href: "#mobile" },
+            { id: 1.1, name: "Home Page", href: "/" },
+            { id: 1.2, name: "Map Dashboard", href: "/map-dashboard" },
             { id: 1.3, name: "Desktop", href: "#desktop" },
             { id: 1.4, name: "API", href: "#api" },
             { id: 1.5, name: "Data", href: "#data" }
