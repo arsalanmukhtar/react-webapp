@@ -1,25 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiUser, FiMap } from 'react-icons/fi';
-import { useAuth } from '../../contexts/AuthContext';
-import AccountSettingsForm from './AccountSettingsForm/AccountSettingsForm'; // Updated import path
-import MapSettingsForm from './MapSettingsForm/MapSettingsForm';     // Updated import path
+import { useAuth } from '../../../contexts/AuthContext';
+import AccountSettingsForm from '../AccountSettingsForm/AccountSettingsForm'; // Updated import path
+import MapSettingsForm from '../MapSettingsForm/MapSettingsForm';     // Updated import path
 
 const UserPanelSettings = () => {
     const { user, token, updateUserProfile, updateMapSettings } = useAuth();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('account');
-    const [notification, setNotification] = useState({ message: '', type: '', visible: false });
+    // Initial state for notification: not visible, positioned off-screen above
+    const [notification, setNotification] = useState({ message: '', type: '', visible: false, translateY: '-full' });
 
-    // Effect to auto-hide notification after 5 seconds
+    // Effect to auto-hide notification after 3 seconds with animation
     useEffect(() => {
+        let timer;
         if (notification.visible) {
-            const timer = setTimeout(() => {
-                setNotification(prev => ({ ...prev, visible: false }));
-            }, 5000); // 5 seconds total duration
-            return () => clearTimeout(timer);
+            // Set a timeout to start sliding out after 2.5 seconds (allowing 0.5s for initial slide-in)
+            timer = setTimeout(() => {
+                setNotification(prev => ({ ...prev, translateY: '-full' })); // Start slide-out animation
+            }, 2500); // Start sliding out after 2.5 seconds
+
+            // Set another timeout to completely hide the notification after 3 seconds (2.5s + 0.5s animation duration)
+            const hideTimer = setTimeout(() => {
+                setNotification(prev => ({ ...prev, visible: false, message: '' })); // Fully hide and clear message
+            }, 3000); // Total 3 seconds until fully hidden
+
+            return () => {
+                clearTimeout(timer);
+                clearTimeout(hideTimer);
+            };
         }
-    }, [notification.visible, notification.message]);
+    }, [notification.visible, notification.message]); // Depend on message to re-trigger if message changes while visible
+
+    // Function to show notification with slide-in animation
+    const showNotification = (message, type) => {
+        setNotification({ message, type, visible: true, translateY: '0' }); // Slide in
+    };
 
     return (
         <div className="absolute top-[50px] left-0 right-0 bottom-0 flex bg-gray-50 overflow-hidden">
@@ -77,10 +94,11 @@ const UserPanelSettings = () => {
 
                     {/* Consolidated Message Display at the top center of the main container */}
                     {notification.visible && (
-                        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 p-3 rounded-md shadow-lg text-sm transition-all duration-500 ease-out
+                        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 p-3 rounded-md shadow-lg text-sm transition-transform duration-500 ease-out
                                 ${notification.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' :
                                 notification.type === 'error' ? 'bg-red-100 text-red-800 border border-red-300' :
                                     'bg-blue-100 text-blue-800 border border-blue-300'}
+                                transform ${notification.translateY === '0' ? 'translate-y-0' : '-translate-y-full'}
                                 `}>
                             <p className="text-center">{notification.message}</p>
                         </div>
@@ -92,7 +110,7 @@ const UserPanelSettings = () => {
                             user={user}
                             token={token}
                             updateUserProfile={updateUserProfile}
-                            setNotification={setNotification}
+                            setNotification={showNotification} // Pass the new showNotification function
                         />
                     )}
 
@@ -101,7 +119,7 @@ const UserPanelSettings = () => {
                             user={user}
                             token={token}
                             updateMapSettings={updateMapSettings}
-                            setNotification={setNotification}
+                            setNotification={showNotification} // Pass the new showNotification function
                         />
                     )}
                 </div>
