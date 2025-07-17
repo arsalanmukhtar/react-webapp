@@ -1,4 +1,6 @@
+/* MapDashboard.css */
 
+/* This container will hold the controls and overlay the map */
 .map-container {
     position: absolute;
     top: 50px;           /* Start below the navbar */
@@ -7,7 +9,54 @@
     bottom: 0;
     width: 100vw;
     height: calc(100vh - 50px); /* Fill remaining space */
-    z-index: 0;
+    z-index: 2; /* Ensure it's above the map background but below other overlays if any */
+    pointer-events: none;
+}
+
+/* New CSS for the map background container in App.jsx */
+.map-background-container {
+    position: absolute;
+    top: 50px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    height: calc(100vh - 50px);
+    z-index: 1; /* must be higher than other containers like .map-container */
+    pointer-events: auto; /* Ensure mouse events pass through */
+}
+
+.map-container .interactive-element {
+    pointer-events: auto;
+}
+
+/* Mapbox Navigation Control size */
+.mapboxgl-ctrl-group button {
+    width: 24px !important; /* Smaller width */
+    height: 24px !important; /* Smaller height */
+    line-height: 24px !important; /* Adjust line height for icon centering */
+    font-size: 14px !important; /* Smaller icon size if text-based */
+}
+
+.mapboxgl-ctrl-group button + button {
+    border-top: 1px solid rgba(0, 0, 0, 0.1) !important; /* Adjust border for stacked buttons */
+}
+
+/* Adjust padding/margin of the control itself if needed */
+.mapboxgl-ctrl-top-right .mapboxgl-ctrl,
+.mapboxgl-ctrl-top-left .mapboxgl-ctrl {
+    margin: 5px !important; /* Smaller margin around the control group */
+}
+
+.mapboxgl-ctrl-geocoder, .mapboxgl-ctrl-geocoder--input {
+    font-size: 13px;
+    font-family: "Josefin Sans", sans-serif;
+}
+
+.mapboxgl-ctrl-geocoder--input:focus, .mapboxgl-ctrl-geocoder--input:active {
+    outline: none;
+    box-shadow: none;
+    border: none;
 }
 
 .custom-map-controls {
@@ -21,6 +70,7 @@
     padding: 0;
     z-index: 10;
     align-items: center;
+    pointer-events: auto;
 }
 
 .map-btn {
@@ -35,9 +85,9 @@
     color: #111;
     cursor: pointer;
     transition: background 0.2s, box-shadow 0.2s;
+    pointer-events: auto; /* Ensure button can be clicked */
 }
 .map-btn:hover {
     background: rgba(0,0,0,0.08);
     color: #000;
 }
-
