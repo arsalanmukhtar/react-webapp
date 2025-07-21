@@ -6,12 +6,13 @@ from fastapi import (
     Security,
 )
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError # Import IntegrityError
-from typing import Dict, Optional
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import inspect, text # Import text for raw SQL queries
+from typing import Dict, Optional, List, Any
 
-from .database import get_db
+from .database import get_db, engine
 from .models import User
-from .schemas import UserResponse, UserSettingsUpdate, MapSettingsUpdate
+from .schemas import UserResponse, UserSettingsUpdate, MapSettingsUpdate, TableSchema, ColumnSchema
 from .auth import (
     get_current_user,
     get_password_hash
@@ -51,22 +52,22 @@ async def update_user_account_settings(
     update_fields = {
         "full_name": settings_update.full_name,
         "password": settings_update.password,
-        "profile_pic": settings_update.profile_pic
+        "profile_pic": settings_update.profile_pic,
     }
-    if not any(v is not None for v in update_fields.values()):
+
+    updates = {k: v for k, v in update_fields.items() if v is not None}
+
+    if not updates:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one field (full_name, password, or profile_pic) must be provided for update.",
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No fields provided for update."
         )
 
-    if settings_update.full_name is not None:
-        current_user.full_name = settings_update.full_name
+    if "password" in updates:
+        current_user.hashed_password = get_password_hash(updates["password"])
+        del updates["password"]
 
-    if settings_update.password is not None:
-        current_user.hashed_password = get_password_hash(settings_update.password)
-
-    if settings_update.profile_pic is not None:
-        current_user.profile_pic = settings_update.profile_pic
+    for key, value in updates.items():
+        setattr(current_user, key, value)
 
     try:
         db.add(current_user)
@@ -98,21 +99,9 @@ async def update_user_map_settings(
     db: Session = Depends(get_db),
 ):
     """
-    Updates the authenticated user's map settings (center, zoom, theme).
+    Updates the authenticated user's map settings (center latitude, longitude, zoom, theme).
     Requires a valid JWT token.
     """
-    update_fields = {
-        "map_center_lat": settings_update.map_center_lat,
-        "map_center_lon": settings_update.map_center_lon,
-        "map_zoom": settings_update.map_zoom,
-        "map_theme": settings_update.map_theme
-    }
-    if not any(v is not None for v in update_fields.values()):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one field (map_center_lat, map_center_lon, map_zoom, or map_theme) must be provided for update.",
-        )
-
     if settings_update.map_center_lat is not None:
         current_user.map_center_lat = settings_update.map_center_lat
     if settings_update.map_center_lon is not None:
@@ -156,6 +145,57 @@ async def get_public_data():
 )
 async def get_protected_data(current_user: User = Depends(get_current_user)):
     """
-    A protected endpoint to demonstrate data fetching that requires authentication.
+    A protected endpoint to demonstrate data fetching with authentication.
     """
-    return {"message": f"Hello {current_user.email}, this is protected data!"}
+    return {"message": f"Hello {current_user.username}, this is protected data!"}
+
+
+@router.get("/layers/tables", response_model=List[TableSchema])
+async def get_layers_tables():
+    """
+    Returns a list of all table names within the 'layers' schema, along with their column properties and geometry type.
+    This is a public route.
+    """
+    inspector = inspect(engine)
+    try:
+        table_names = inspector.get_table_names(schema='layers')
+        
+        tables_data = []
+        with engine.connect() as connection:
+            for table_name in table_names:
+                columns_data = []
+                table_geometry_type = None
+                
+                # Query geometry_columns for the table's geometry type
+                # This assumes a PostGIS database with the geometry_columns view
+                geometry_query = text(f"""
+                    SELECT type
+                    FROM geometry_columns
+                    WHERE f_table_schema = 'layers' AND f_table_name = :table_name
+                    LIMIT 1;
+                """)
+                result = connection.execute(geometry_query, {"table_name": table_name}).fetchone()
+                if result:
+                    table_geometry_type = result[0] # The 'type' column from geometry_columns
+
+                columns = inspector.get_columns(table_name, schema='layers')
+                for col in columns:
+                    columns_data.append(ColumnSchema(
+                        name=col['name'],
+                        type=str(col['type']),
+                        nullable=col['nullable'],
+                        default=col.get('default'),
+                        primary_key=col.get('primary_key', False),
+                        autoincrement=col.get('autoincrement', False),
+                        comment=col.get('comment')
+                    ))
+                
+                tables_data.append(TableSchema(name=table_name, columns=columns_data, geometry_type=table_geometry_type))
+        
+        return tables_data
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve tables from 'layers' schema: {e}"
+        )
+
