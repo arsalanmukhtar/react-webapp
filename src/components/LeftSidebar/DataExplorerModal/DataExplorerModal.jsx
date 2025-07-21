@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import CatalogExplorerContent from './CatalogExplorerContent';
 import DatasetUploadContent from './DatasetUploadContent';
 import { useAuth } from '../../../contexts/AuthContext';
+import { FiPlusCircle } from 'react-icons/fi'; // Import the icon for the disabled state
 
 // Function to pretty print table names (e.g., convert snake_case to Title Case)
 const prettyPrintName = (name) => {
@@ -216,9 +217,10 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
                         <button
                             onClick={handleAddData}
                             disabled={!isAddDataButtonEnabled}
-                            className={`px-4 py-2 rounded-md border border-green-400 transition-colors duration-200 cursor-pointer
-                                        ${isAddDataButtonEnabled ? 'bg-green-500 text-white hover:bg-green-600 hover:border-green-800' : 'bg-green-300 text-gray-500 cursor-not-allowed'}`}
+                            className={`px-4 py-2 rounded-md border border-green-400 transition-colors duration-200
+                                        ${isAddDataButtonEnabled ? 'bg-green-500 text-white hover:bg-green-600 hover:border-green-800 cursor-pointer' : 'bg-green-300 text-gray-500 cursor-not-allowed'}`}
                         >
+                            {/* Removed FiPlusCircle icon */}
                             Add Data
                         </button>
                     </div>
