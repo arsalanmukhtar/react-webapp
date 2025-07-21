@@ -1,0 +1,5 @@
+/* components/LeftSidebar/LeftSidebar.css */
+
+/* No specific custom CSS needed for now, Tailwind handles the transitions and widths */
+/* The 'transition-all duration-300 ease-in-out' classes on the divs handle the animation */
+/* The widths (w-16, w-64) are directly applied via Tailwind classes in LeftSidebar.jsx */
