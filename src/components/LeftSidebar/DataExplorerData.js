@@ -7,11 +7,6 @@ export const DataExplorerOptions = [
         icon: FiBookOpen,
     },
     {
-        id: 'upload',
-        name: 'Dataset Upload',
-        icon: FiUploadCloud,
-    },
-    {
         id: 'external',
         name: 'Dataset External',
         icon: FiLink,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import CatalogExplorerContent from './CatalogExplorerContent';
-import DatasetUploadContent from './DatasetUploadContent';
+// import DatasetUploadContent from './DatasetUploadContent';
 import { useAuth } from '../../../contexts/AuthContext';
 
 // Function to pretty print table names (e.g., convert snake_case to Title Case)
@@ -19,13 +19,10 @@ const capitalizeFirstLetter = (string) => {
     return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase();
 };
 
-const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
+
+const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap, catalogTables, catalogLoading, catalogError }) => {
     const { token } = useAuth();
-    const [tables, setTables] = useState([]);
-    const [loading, setLoading] = useState(true); // For initial table list
-    const [error, setError] = useState(null);
     const [selectedTables, setSelectedTables] = useState([]);
-    const [uploadedGeoJSONs, setUploadedGeoJSONs] = useState([]);
     const [activeTab, setActiveTab] = useState(initialTab || 'catalog');
 
     // Effect to update activeTab when initialTab prop changes
@@ -49,41 +46,13 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
     }, [isOpen, onClose]);
 
     useEffect(() => {
-        if (isOpen && activeTab === 'catalog') {
-            const fetchTables = async () => {
-                setLoading(true);
-                setError(null);
-                try {
-                    const tablesRes = await fetch('/api/data/layers/tables', {
-                        method: 'GET',
-                        headers: { 'Content-Type': 'application/json' },
-                    });
-
-                    if (!tablesRes.ok) {
-                        const errorData = await tablesRes.json();
-                        setError(errorData.detail || 'Failed to fetch tables.');
-                        setLoading(false);
-                        return;
-                    }
-                    const initialTables = await tablesRes.json();
-                    setTables(initialTables);
-
-                } catch (err) {
-                    console.error('Network or unexpected error:', err);
-                    setError('An unexpected error occurred while fetching tables.');
-                } finally {
-                    setLoading(false);
-                }
-            };
-            fetchTables();
-        } else {
-            setTables([]);
+        if (!isOpen) {
             setSelectedTables([]);
-            setUploadedGeoJSONs([]);
         }
-    }, [isOpen, activeTab]);
+    }, [isOpen]);
 
     if (!isOpen) return null;
+
 
     let modalTitle = "Dataset Control Panel";
     let modalContent;
@@ -107,35 +76,16 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
                 addLayerToMap({
                     name: prettyPrintName(table.name),
                     original_name: table.name,
-                    layer_type: 'catalog', // Explicitly set layer_type
+                    layer_type: 'catalog',
                     geometry_type: capitalizeFirstLetter(table.geometry_type),
-                    srid: table.srid ? String(table.srid) : 'N/A', // Ensure SRID is string
+                    srid: table.srid ? String(table.srid) : 'N/A',
                     feature_count: table.feature_count !== undefined ? table.feature_count : 'N/A',
-                    color: '#000000', // Default color, user can change later
+                    color: '#000000',
                     is_visible: true,
                     is_selected_for_info: false,
-                    // No geojson_data for catalog layers
                 });
             });
             onClose();
-        } else if (activeTab === 'upload') {
-            if (uploadedGeoJSONs.length > 0) {
-                uploadedGeoJSONs.forEach(geojsonLayer => {
-                    addLayerToMap({
-                        name: geojsonLayer.name,
-                        layer_type: 'geojson', // Explicitly set layer_type
-                        geojson_data: JSON.stringify(geojsonLayer.geojson), // Stringify GeoJSON for storage
-                        geometry_type: capitalizeFirstLetter(geojsonLayer.geometry_type),
-                        srid: geojsonLayer.srid,
-                        feature_count: geojsonLayer.feature_count,
-                        color: '#000000', // Default color
-                        is_visible: true,
-                        is_selected_for_info: false,
-                        original_name: null, // No original_name for geojson
-                    });
-                });
-                onClose();
-            }
         } else if (activeTab === 'external') {
             console.log("Adding external dataset (not yet implemented)");
             onClose();
@@ -147,19 +97,11 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
             isAddDataButtonEnabled = selectedTables.length > 0;
             modalContent = (
                 <CatalogExplorerContent
-                    tables={tables}
-                    loading={loading}
-                    error={error}
+                    tables={catalogTables}
+                    loading={catalogLoading}
+                    error={catalogError}
                     selectedTables={selectedTables}
                     onToggleSelectTable={handleToggleSelectTable}
-                />
-            );
-            break;
-        case 'upload':
-            isAddDataButtonEnabled = uploadedGeoJSONs.length > 0;
-            modalContent = (
-                <DatasetUploadContent
-                    onGeoJSONChange={setUploadedGeoJSONs}
                 />
             );
             break;
@@ -194,13 +136,6 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
                                     ${activeTab === 'catalog' ? 'border-green-500 text-green-500' : 'border-transparent text-gray-700 hover:text-gray-700'}`}
                     >
                         Catalog Explorer
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('upload')}
-                        className={`ml-4 px-4 py-2 text-sm font-semibold border-b-2 transition-colors duration-200
-                                    ${activeTab === 'upload' ? 'border-green-500 text-green-500' : 'border-transparent text-gray-700 hover:text-gray-700'}`}
-                    >
-                        Dataset Upload
                     </button>
                     <button
                         onClick={() => setActiveTab('external')}
