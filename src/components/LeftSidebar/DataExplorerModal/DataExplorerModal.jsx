@@ -105,14 +105,16 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
         if (activeTab === 'catalog' && selectedTables.length > 0) {
             selectedTables.forEach(table => {
                 addLayerToMap({
-                    type: 'catalog',
                     name: prettyPrintName(table.name),
                     original_name: table.name,
+                    layer_type: 'catalog', // Explicitly set layer_type
                     geometry_type: capitalizeFirstLetter(table.geometry_type),
-                    srid: table.srid || 'N/A', // Use SRID from API response
-                    feature_count: table.feature_count !== undefined ? table.feature_count : 'N/A', // Use feature_count from API response
-                    columns: table.columns,
-                    description: "Data from Catalog Explorer",
+                    srid: table.srid ? String(table.srid) : 'N/A', // Ensure SRID is string
+                    feature_count: table.feature_count !== undefined ? table.feature_count : 'N/A',
+                    color: '#000000', // Default color, user can change later
+                    is_visible: true,
+                    is_selected_for_info: false,
+                    // No geojson_data for catalog layers
                 });
             });
             onClose();
@@ -120,12 +122,16 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
             if (uploadedGeoJSONs.length > 0) {
                 uploadedGeoJSONs.forEach(geojsonLayer => {
                     addLayerToMap({
-                        type: 'geojson',
                         name: geojsonLayer.name,
-                        geojson: geojsonLayer.geojson,
+                        layer_type: 'geojson', // Explicitly set layer_type
+                        geojson_data: JSON.stringify(geojsonLayer.geojson), // Stringify GeoJSON for storage
                         geometry_type: capitalizeFirstLetter(geojsonLayer.geometry_type),
                         srid: geojsonLayer.srid,
                         feature_count: geojsonLayer.feature_count,
+                        color: '#000000', // Default color
+                        is_visible: true,
+                        is_selected_for_info: false,
+                        original_name: null, // No original_name for geojson
                     });
                 });
                 onClose();
