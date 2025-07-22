@@ -65,6 +65,11 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
         if (e) e.preventDefault();
         setLocalNotification({ message: '', type: '', visible: false }); // Clear previous local notification
 
+        if (!fullName.trim()) {
+            setLocalNotification({ message: 'Full name is required.', type: 'error', visible: true });
+            return;
+        }
+
         if (newPassword && newPassword !== confirmPassword) {
             setLocalNotification({ message: 'New passwords do not match.', type: 'error', visible: true });
             return;
@@ -135,6 +140,7 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
                             className="mt-1 block w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm placeholder-zinc-400 focus:outline-none focus:border-green-500"
                             value={fullName}
                             onChange={(e) => setFullName(e.target.value)}
+                            required
                         />
                     </div>
 
