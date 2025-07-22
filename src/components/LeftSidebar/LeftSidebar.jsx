@@ -157,6 +157,7 @@ const LeftSidebar = () => {
             if (res.ok) {
                 const newLayer = await res.json();
                 setActiveMapLayers(prevLayers => [...prevLayers, { ...newLayer, isVisible: newLayer.is_visible }]);
+                setActiveLayer('layers'); // Show the Layers panel after adding
             }
         } catch (err) {
             // handle error
