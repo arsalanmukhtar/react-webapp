@@ -55,7 +55,6 @@ class MapLayer(Base):
     layer_type = Column(String(50), nullable=False)
     geometry_type = Column(String(50), nullable=True)
     is_visible = Column(Boolean, default=True)
-    is_selected_for_info = Column(Boolean, default=False)
     color = Column(String(7), default="#000000")
     srid = Column(String(50), nullable=True)
     feature_count = Column(Integer, nullable=True)

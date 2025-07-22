@@ -110,7 +110,6 @@ class MapLayerBase(BaseModel):
     layer_type: str
     geometry_type: Optional[str] = None
     is_visible: Optional[bool] = True
-    is_selected_for_info: Optional[bool] = False
     color: Optional[str] = "#000000"
     srid: Optional[str] = None
     feature_count: Optional[int] = None
@@ -120,7 +119,6 @@ class MapLayerCreate(MapLayerBase):
 
 class MapLayerUpdate(BaseModel):
     is_visible: Optional[bool] = None
-    is_selected_for_info: Optional[bool] = None
     color: Optional[str] = None
 
 class MapLayerResponse(MapLayerBase):

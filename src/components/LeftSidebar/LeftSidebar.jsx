@@ -52,6 +52,7 @@ const LeftSidebar = () => {
     const [activeMapLayers, setActiveMapLayers] = useState([]);
     const { user, token } = useAuth();
     const [selectedLayerForInfo, setSelectedLayerForInfo] = useState(null); // State for info panel
+    const [selectedLayerId, setSelectedLayerId] = useState(null); // State for highlighted layer
 
     // Catalog tables state
     const [catalogTables, setCatalogTables] = useState([]);
@@ -96,7 +97,7 @@ const LeftSidebar = () => {
                 });
                 if (res.ok) {
                     const layers = await res.json();
-                    setActiveMapLayers(layers.map(l => ({ ...l, isVisible: l.is_visible, isSelectedForInfo: l.is_selected_for_info })));
+                    setActiveMapLayers(layers.map(l => ({ ...l, isVisible: l.is_visible })));
                 } else {
                     setActiveMapLayers([]);
                 }
@@ -140,7 +141,6 @@ const LeftSidebar = () => {
             layer_type: layerData.layer_type || layerData.type || 'catalog',
             geometry_type: layerData.geometry_type || null,
             is_visible: layerData.is_visible !== undefined ? layerData.is_visible : true,
-            is_selected_for_info: layerData.is_selected_for_info !== undefined ? layerData.is_selected_for_info : false,
             color: layerData.color || '#000000',
             srid: layerData.srid || null,
             feature_count: layerData.feature_count !== undefined ? layerData.feature_count : null
@@ -156,7 +156,7 @@ const LeftSidebar = () => {
             });
             if (res.ok) {
                 const newLayer = await res.json();
-                setActiveMapLayers(prevLayers => [...prevLayers, { ...newLayer, isVisible: newLayer.is_visible, isSelectedForInfo: newLayer.is_selected_for_info }]);
+                setActiveMapLayers(prevLayers => [...prevLayers, { ...newLayer, isVisible: newLayer.is_visible }]);
             }
         } catch (err) {
             // handle error
@@ -182,33 +182,14 @@ const LeftSidebar = () => {
         } catch (err) {}
     };
 
-    // Select layer for info and update DB
-    const handleSelectLayerForInfo = async (layer) => {
-        if (!token) return;
+    // Select layer for info (frontend only) and highlight
+    const handleSelectLayerForInfo = (layer) => {
         if (selectedLayerForInfo && selectedLayerForInfo.id === layer.id) {
             setSelectedLayerForInfo(null);
-            setActiveMapLayers(prevLayers => prevLayers.map(l => ({ ...l, isSelectedForInfo: false })));
-            // Optionally update DB to deselect
-            await fetch(`/api/data/users/me/map_layers/${layer.id}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ is_selected_for_info: false })
-            });
+            setSelectedLayerId(null);
         } else {
             setSelectedLayerForInfo(layer);
-            setActiveMapLayers(prevLayers => prevLayers.map(l => ({ ...l, isSelectedForInfo: l.id === layer.id }))); 
-            // Update DB to select
-            await fetch(`/api/data/users/me/map_layers/${layer.id}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ is_selected_for_info: true })
-            });
+            setSelectedLayerId(layer.id);
         }
     };
 
@@ -281,6 +262,7 @@ const LeftSidebar = () => {
                                         <LayerItem
                                             key={layer.id}
                                             layer={layer}
+                                            isSelected={selectedLayerId === layer.id}
                                             onToggleVisibility={toggleLayerVisibility}
                                             onSelectLayerForInfo={handleSelectLayerForInfo}
                                             onDeleteLayer={handleDeleteLayer}

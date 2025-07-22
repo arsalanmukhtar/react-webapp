@@ -2,7 +2,7 @@ import React from 'react';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import { FaTrashAlt } from "react-icons/fa";
 
-const LayerItem = ({ layer, onToggleVisibility, onSelectLayerForInfo, onDeleteLayer }) => {
+const LayerItem = ({ layer, onToggleVisibility, onSelectLayerForInfo, onDeleteLayer, isSelected }) => {
     const handleToggleVisibility = (event) => {
         event.stopPropagation(); // Prevent triggering onSelectLayerForInfo when toggling visibility
         onToggleVisibility(layer.name);
@@ -20,7 +20,7 @@ const LayerItem = ({ layer, onToggleVisibility, onSelectLayerForInfo, onDeleteLa
     return (
         <div
             className={`flex items-center justify-between p-2 rounded-md border text-sm cursor-pointer
-                        ${layer.isSelectedForInfo ? 'bg-green-100 border-green-500' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}
+                        ${isSelected ? 'bg-green-100 border-green-500' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}
             onClick={handleLayerClick}
         >
             <span className={`flex-1 truncate ${!layer.isVisible ? 'text-gray-400 line-through' : ''}`}>
