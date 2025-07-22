@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { FiSave, FiXCircle, FiUser } from 'react-icons/fi';
+import React, { useState, useEffect, useRef } from 'react'; // Import useRef
+import { FiSave, FiXCircle, FiUpload } from 'react-icons/fi'; // Added FiUpload
 
 const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }) => {
     const [fullName, setFullName] = useState(user?.full_name || '');
@@ -7,6 +7,10 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
     const [confirmPassword, setConfirmPassword] = useState('');
     const [profilePic, setProfilePic] = useState(user?.profile_pic || '');
     const [profilePicFile, setProfilePicFile] = useState(null);
+    const fileInputRef = useRef(null); // Ref for the hidden file input
+
+    // Local notification state
+    const [localNotification, setLocalNotification] = useState({ message: '', type: '', visible: false });
 
     // Update form fields if user data from context changes
     useEffect(() => {
@@ -15,6 +19,17 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
             setProfilePic(user.profile_pic || '');
         }
     }, [user]);
+
+    // Effect to auto-hide local notification after 3 seconds
+    useEffect(() => {
+        let timer;
+        if (localNotification.visible) {
+            timer = setTimeout(() => {
+                setLocalNotification(prev => ({ ...prev, visible: false, message: '' }));
+            }, 3000);
+        }
+        return () => clearTimeout(timer);
+    }, [localNotification.visible]);
 
     const handleProfilePicChange = (e) => {
         const file = e.target.files[0];
@@ -31,7 +46,7 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
             } else if (file.type.startsWith('image/')) {
                 reader.readAsDataURL(file);
             } else {
-                setNotification('Unsupported file type. Please upload an SVG, PNG, or JPEG image.', 'error');
+                setLocalNotification({ message: 'Unsupported file type. Please upload an SVG, PNG, or JPEG image.', type: 'error', visible: true });
                 setProfilePicFile(null);
                 setProfilePic('');
             }
@@ -48,14 +63,14 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
 
     const handleSubmitAccountSettings = async (e) => {
         if (e) e.preventDefault();
-        setNotification('', ''); // Clear previous notification
+        setLocalNotification({ message: '', type: '', visible: false }); // Clear previous local notification
 
         if (newPassword && newPassword !== confirmPassword) {
-            setNotification('New passwords do not match.', 'error');
+            setLocalNotification({ message: 'New passwords do not match.', type: 'error', visible: true });
             return;
         }
         if (newPassword && newPassword.length < 8) {
-            setNotification('New password must be at least 8 characters long.', 'error');
+            setLocalNotification({ message: 'New password must be at least 8 characters long.', type: 'error', visible: true });
             return;
         }
 
@@ -71,7 +86,7 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
         }
 
         if (Object.keys(updates).length === 0) {
-            setNotification('No changes to save.', 'info');
+            setLocalNotification({ message: 'No changes to save.', type: 'info', visible: true });
             return;
         }
 
@@ -88,17 +103,21 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
             if (res.ok) {
                 const data = await res.json();
                 updateUserProfile(data);
-                setNotification('Account settings updated successfully!', 'success');
+                setLocalNotification({ message: 'Account settings updated successfully!', type: 'success', visible: true });
                 setNewPassword('');
                 setConfirmPassword('');
                 setProfilePicFile(null);
+                // Reset the file input visually after successful upload
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = '';
+                }
             } else {
                 const errorData = await res.json();
-                setNotification(errorData.detail || 'Failed to update account settings.', 'error');
+                setLocalNotification({ message: errorData.detail || 'Failed to update account settings.', type: 'error', visible: true });
             }
         } catch (err) {
             console.error('Network or unexpected error:', err);
-            setNotification('An unexpected error occurred while saving account settings.', 'error');
+            setLocalNotification({ message: 'An unexpected error occurred while saving account settings.', type: 'error', visible: true });
         }
     };
 
@@ -175,20 +194,26 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
 
                 {/* Profile Picture */}
                 <div>
-                    <label htmlFor="profilePicUpload" className="block text-sm font-medium text-gray-700 mb-2">Profile Picture</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Profile Picture</label>
+                    {/* Hidden file input */}
                     <input
                         type="file"
                         id="profilePicUpload"
                         accept="image/svg+xml,image/png,image/jpeg"
                         onChange={handleProfilePicChange}
-                        key={profilePic} // Added key prop to force re-render and reset input
-                        className="block w-full text-sm text-gray-500
-                        file:mr-4 file:py-2 file:px-4
-                        file:rounded-md file:border-0
-                        file:text-sm file:font-semibold
-                        file:bg-green-50 file:text-green-700
-                        hover:file:bg-green-100 hover:file:cursor-pointer"
+                        ref={fileInputRef} // Attach ref
+                        className="hidden" // Hide the default input
                     />
+                    {/* Custom styled button to trigger file input */}
+                    <button
+                        type="button"
+                        onClick={() => fileInputRef.current.click()}
+                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 cursor-pointer"
+                    >
+                        <FiUpload className="-ml-0.5 mr-2 h-4 w-4" />
+                        Choose File
+                    </button>
+
                     {profilePic && ( // Only show preview if profilePic has a value
                         <div className="mt-4 flex items-center space-x-3">
                             <span className="text-sm text-gray-600">Current file:</span>
@@ -207,18 +232,29 @@ const AccountSettingsForm = ({ user, token, updateUserProfile, setNotification }
                             </button>
                         </div>
                     )}
+                    {profilePicFile && <p className="mt-2 text-sm text-gray-500">Selected: {profilePicFile.name}</p>}
                     {!profilePic && user?.profile_pic && ( // If profilePic is cleared locally but user still has one in DB
                         <p className="mt-2 text-sm text-gray-500">No new picture selected. Currently using saved picture.</p>
                     )}
-                    {!profilePic && !user?.profile_pic && ( // If no profile pic set at all
+                    {!profilePic && !user?.profile_pic && !profilePicFile && ( // If no profile pic set at all and no file selected
                         <p className="mt-2 text-sm text-gray-500">No profile picture set. Using default icon.</p>
                     )}
                 </div>
             </div> {/* End of scrollable content div */}
 
+            {/* Local Notification Display */}
+            {localNotification.visible && (
+                <div className={`text-center text-xs mt-2
+                                ${localNotification.type === 'success' ? 'text-green-600' :
+                                  localNotification.type === 'error' ? 'text-red-600' :
+                                  'text-blue-600'}`}>
+                    {localNotification.message}
+                </div>
+            )}
+
             <button
                 type="submit"
-                className="w-full bg-green-500 text-white py-2 px-4 rounded-md border border-green-400
+                className="w-full bg-green-500 text-white py-2 px-4 rounded-md border border-green-400 mt-4
                 hover:bg-green-400 hover:border-green-800 focus:outline-none focus:border-green-500
                 active:border-green-800 hover:cursor-pointer flex items-center justify-center"
             >

@@ -3,15 +3,6 @@ import { FiUser, FiMap } from 'react-icons/fi';
 import AccountSettingsForm from '../AccountSettingsForm/AccountSettingsForm'; // Path relative to UserSettings folder
 import MapSettingsForm from '../MapSettingsForm/MapSettingsForm';     // Path relative to UserSettings folder
 
-const MapboxStyles = [
-    { name: "Streets", url: "mapbox://styles/mapbox/streets-v11" },
-    { name: "Outdoors", url: "mapbox://styles/mapbox/outdoors-v11" },
-    { name: "Light", url: "mapbox://styles/mapbox/light-v10" },
-    { name: "Dark", url: "mapbox://styles/mapbox/dark-v10" },
-    { name: "Satellite", url: "mapbox://styles/mapbox/satellite-v9" },
-    { name: "Satellite Streets", url: "mapbox://styles/mapbox/satellite-streets-v11" },
-];
-
 const UserSettings = ({ user, token, updateUserProfile, updateMapSettings, setNotification }) => {
     // Internal state for User Settings tabs: 'account' or 'map'
     const [activeTab, setActiveTab] = useState('account');
@@ -40,7 +31,7 @@ const UserSettings = ({ user, token, updateUserProfile, updateMapSettings, setNo
                     user={user}
                     token={token}
                     updateUserProfile={updateUserProfile}
-                    setNotification={setNotification}
+                    setNotification={setNotification} // Pass the setNotification function
                 />
             )}
 
@@ -49,7 +40,7 @@ const UserSettings = ({ user, token, updateUserProfile, updateMapSettings, setNo
                     user={user}
                     token={token}
                     updateMapSettings={updateMapSettings}
-                    setNotification={setNotification}
+                    setNotification={setNotification} // Pass the setNotification function
                 />
             )}
         </div>

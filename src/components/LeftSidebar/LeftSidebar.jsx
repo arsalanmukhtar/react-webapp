@@ -5,6 +5,43 @@ import DataExplorerModal from './DataExplorerModal/DataExplorerModal';
 import { DataExplorerOptions } from './DataExplorerData';
 import LayerItem from './LayerItem';
 
+// Helper component for rendering geometry icons
+const GeometryIcon = ({ type, color = 'currentColor', size = 16 }) => {
+    // Log the type prop to debug its value
+    console.log("GeometryIcon received type:", type);
+
+    // Convert type to lowercase for case-insensitive comparison
+    const normalizedType = type ? type.toLowerCase() : '';
+
+    switch (normalizedType) {
+        case 'point':
+        case 'multipoint':
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="6" fill={color} />
+                </svg>
+            );
+        case 'linestring':
+        case 'multilinestring':
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {/* Increased stroke width for better visibility */}
+                    <path d="M4 12L20 12" stroke={color} strokeWidth="8" strokeLinecap="round" />
+                </svg>
+            );
+        case 'polygon':
+        case 'multipolygon':
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {/* Changed to solid fill and made the square fill the entire viewBox */}
+                    <rect x="0" y="0" width="24" height="24" fill={color} />
+                </svg>
+            );
+        default:
+            return <FiInfo size={size} color={color} />; // Default icon for unknown types
+    }
+};
+
 const LeftSidebar = () => {
     const [activeLayer, setActiveLayer] = useState(null);
     const [isDataExplorerModalOpen, setIsDataExplorerModalOpen] = useState(false);
@@ -14,9 +51,20 @@ const LeftSidebar = () => {
     const [selectedLayerForInfo, setSelectedLayerForInfo] = useState(null); // State for info panel
 
     const toggleLayer = (layerName) => {
-        setActiveLayer(prevActiveLayer => (prevActiveLayer === layerName ? null : layerName));
-        setIsDataExplorerModalOpen(false);
-        setSelectedLayerForInfo(null); // Clear selected layer info when panel closes or switches
+        setActiveLayer(prevActiveLayer => {
+            const newActiveLayer = prevActiveLayer === layerName ? null : layerName;
+
+            // If switching away from 'layers' panel or collapsing the sidebar
+            if (newActiveLayer !== 'layers') {
+                setSelectedLayerForInfo(null); // Clear selected layer info
+                // Remove highlight from all layers
+                setActiveMapLayers(prevLayers =>
+                    prevLayers.map(l => ({ ...l, isSelectedForInfo: false }))
+                );
+            }
+            setIsDataExplorerModalOpen(false); // Always close modal when toggling main sidebar panels
+            return newActiveLayer;
+        });
     };
 
     const openDataExplorerModal = (type) => {
@@ -38,7 +86,7 @@ const LeftSidebar = () => {
             if (prevLayers.some(layer => layer.name === layerData.name)) {
                 return prevLayers; // Don't add if already exists
             }
-            return [...prevLayers, { ...layerData, isVisible: true, isSelectedForInfo: false }]; // Add new layer, default to visible
+            return [...prevLayers, { ...layerData, isVisible: true, isSelectedForInfo: false, color: '#000000' }]; // Add new layer, default to visible and black color
         });
     };
 
@@ -136,7 +184,7 @@ const LeftSidebar = () => {
                             <h4 className="text-md font-semibold text-gray-800 mb-2">Layer Info</h4>
                             {selectedLayerForInfo ? (
                                 <div className="space-y-1 text-xs">
-                                    <p className="font-medium text-green-500">{selectedLayerForInfo.name}</p> {/* Applied text-green-500 */}
+                                    <p className="font-medium text-green-500">{selectedLayerForInfo.name}</p>
                                     <ul className="space-y-1">
                                         <li className="flex items-center">
                                             <FiInfo className="mr-2 text-gray-500" size={12} /> Source: {selectedLayerForInfo.type === 'catalog' ? 'Catalog Layer' : 'GeoJSON Upload'}
@@ -160,20 +208,22 @@ const LeftSidebar = () => {
                 )}
                 {activeLayer === 'list' && (
                     <div className="p-4 h-full overflow-y-auto text-sm">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">Data List</h3>
-                        <p className="text-gray-600">Content for data list view will be displayed here.</p>
-                        <ul className="list-disc list-inside space-y-1 mt-4">
-                            <li>Item A</li>
-                            <li>Item B</li>
-                            <li>Item C</li>
-                            <li>Item D</li>
-                            <li>Item E</li>
-                            <li>Item F</li>
-                            <li>Item G</li>
-                            <li>Item H</li>
-                            <li>Item I</li>
-                            <li>Item J</li>
-                        </ul>
+                        <h3 className="text-lg font-semibold text-gray-800 mb-4">Map Legend</h3>
+                        {activeMapLayers.length === 0 ? (
+                            <p className="text-gray-600">No layers added yet to the map.</p>
+                        ) : (
+                            <div className="space-y-4"> {/* Increased space between items */}
+                                {activeMapLayers.map(layer => (
+                                    <div key={layer.name}> {/* Individual div for each legend item */}
+                                        <div className="text-gray-800 text-sm font-medium mb-1">{layer.name}</div> {/* Layer name */}
+                                        <div className="flex items-center"> {/* Icon and type */}
+                                            <GeometryIcon type={layer.geometry_type} color={layer.color} size={18} />
+                                            <span className="ml-2 text-gray-600 text-xs">{layer.geometry_type || 'Unknown'}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
                 {activeLayer === 'dataExplorer' && (

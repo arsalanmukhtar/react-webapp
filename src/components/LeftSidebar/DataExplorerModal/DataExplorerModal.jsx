@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import CatalogExplorerContent from './CatalogExplorerContent';
 import DatasetUploadContent from './DatasetUploadContent';
 import { useAuth } from '../../../contexts/AuthContext';
-import { FiPlusCircle } from 'react-icons/fi'; // Import the icon for the disabled state
 
 // Function to pretty print table names (e.g., convert snake_case to Title Case)
 const prettyPrintName = (name) => {
@@ -14,13 +13,19 @@ const prettyPrintName = (name) => {
         .join(' '); // Join back with spaces
 };
 
+// Helper to capitalize the first letter of a string
+const capitalizeFirstLetter = (string) => {
+    if (!string) return 'Unknown';
+    return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase();
+};
+
 const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
     const { token } = useAuth();
     const [tables, setTables] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(true); // For initial table list
     const [error, setError] = useState(null);
     const [selectedTables, setSelectedTables] = useState([]);
-    const [uploadedGeoJSONs, setUploadedGeoJSONs] = useState([]); // Now an array for GeoJSONs
+    const [uploadedGeoJSONs, setUploadedGeoJSONs] = useState([]);
     const [activeTab, setActiveTab] = useState(initialTab || 'catalog');
 
     // Effect to update activeTab when initialTab prop changes
@@ -49,20 +54,20 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
                 setLoading(true);
                 setError(null);
                 try {
-                    const res = await fetch('/api/data/layers/tables', {
+                    const tablesRes = await fetch('/api/data/layers/tables', {
                         method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        headers: { 'Content-Type': 'application/json' },
                     });
 
-                    if (res.ok) {
-                        const data = await res.json();
-                        setTables(data);
-                    } else {
-                        const errorData = await res.json();
+                    if (!tablesRes.ok) {
+                        const errorData = await tablesRes.json();
                         setError(errorData.detail || 'Failed to fetch tables.');
+                        setLoading(false);
+                        return;
                     }
+                    const initialTables = await tablesRes.json();
+                    setTables(initialTables);
+
                 } catch (err) {
                     console.error('Network or unexpected error:', err);
                     setError('An unexpected error occurred while fetching tables.');
@@ -74,7 +79,7 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
         } else {
             setTables([]);
             setSelectedTables([]);
-            setUploadedGeoJSONs([]); // Reset to empty array
+            setUploadedGeoJSONs([]);
         }
     }, [isOpen, activeTab]);
 
@@ -101,14 +106,13 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
             selectedTables.forEach(table => {
                 addLayerToMap({
                     type: 'catalog',
-                    name: prettyPrintName(table.name), // Apply prettyPrintName here
-                    original_name: table.name, // Keep original name for console log if needed
-                    geometry_type: table.geometry_type,
-                    // SRID and Feature count are not directly available for catalog layers from current backend
-                    srid: 'N/A',
-                    feature_count: 'N/A',
-                    columns: table.columns, // Pass columns for potential info
-                    description: "Data from Catalog Explorer", // Static description for now
+                    name: prettyPrintName(table.name),
+                    original_name: table.name,
+                    geometry_type: capitalizeFirstLetter(table.geometry_type),
+                    srid: table.srid || 'N/A', // Use SRID from API response
+                    feature_count: table.feature_count !== undefined ? table.feature_count : 'N/A', // Use feature_count from API response
+                    columns: table.columns,
+                    description: "Data from Catalog Explorer",
                 });
             });
             onClose();
@@ -117,9 +121,9 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
                 uploadedGeoJSONs.forEach(geojsonLayer => {
                     addLayerToMap({
                         type: 'geojson',
-                        name: geojsonLayer.name, // Use the name from DatasetUploadContent
+                        name: geojsonLayer.name,
                         geojson: geojsonLayer.geojson,
-                        geometry_type: geojsonLayer.geometry_type,
+                        geometry_type: capitalizeFirstLetter(geojsonLayer.geometry_type),
                         srid: geojsonLayer.srid,
                         feature_count: geojsonLayer.feature_count,
                     });
@@ -220,7 +224,6 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap }) => {
                             className={`px-4 py-2 rounded-md border border-green-400 transition-colors duration-200
                                         ${isAddDataButtonEnabled ? 'bg-green-500 text-white hover:bg-green-600 hover:border-green-800 cursor-pointer' : 'bg-green-300 text-gray-500 cursor-not-allowed'}`}
                         >
-                            {/* Removed FiPlusCircle icon */}
                             Add Data
                         </button>
                     </div>

@@ -1,26 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react'; // Import useRef for click outside
-import { FiSave, FiChevronDown } from 'react-icons/fi'; // Import FiChevronDown for the dropdown arrow
+import React, { useState, useEffect, useRef } from 'react';
+import { FiSave, FiChevronDown } from 'react-icons/fi';
 import InsetMap from '../InsetMap/InsetMap';
 
-// Define Mapbox styles for dropdown
+// Define Maplibre-compatible styles for dropdown
 const MapboxStyles = [
-    { name: "Streets", url: "mapbox://styles/mapbox/streets-v11" },
-    { name: "Outdoors", url: "mapbox://styles/mapbox/outdoors-v11" },
-    { name: "Light", url: "mapbox://styles/mapbox/light-v10" },
-    { name: "Dark", url: "mapbox://styles/mapbox/dark-v10" },
-    { name: "Satellite", url: "mapbox://styles/mapbox/satellite-v9" },
-    { name: "Satellite Streets", url: "mapbox://styles/mapbox/satellite-streets-v11" },
+    { name: "Mapbox Streets", url: "mapbox://styles/mapbox/streets-v11" },
+    { name: "Mapbox Outdoors", url: "mapbox://styles/mapbox/outdoors-v11" },
+    { name: "Mapbox Light", url: "mapbox://styles/mapbox/light-v10" },
+    { name: "Mapbox Dark", url: "mapbox://styles/mapbox/dark-v10" },
+    { name: "Mapbox Satellite", url: "mapbox://styles/mapbox/satellite-v9" },
+    { name: "Mapbox Satellite Streets", url: "mapbox://styles/mapbox/satellite-streets-v11" },
 ];
 
 const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) => {
     const [mapCenterLat, setMapCenterLat] = useState(user?.map_center_lat || 0.0);
     const [mapCenterLon, setMapCenterLon] = useState(user?.map_center_lon || 0.0);
     const [mapZoom, setMapZoom] = useState(user?.map_zoom || 2.0);
-    const [mapTheme, setMapTheme] = useState(user?.map_theme || MapboxStyles[0].url);
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false); // State for custom dropdown
-    const dropdownRef = useRef(null); // Ref for custom dropdown
+    const [mapTheme, setMapTheme] = useState(user?.map_theme || MapboxStyles[0].url); // Use updated styles
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const dropdownRef = useRef(null);
 
-    // Update states when user data from context changes
+    // Local notification state
+    const [localNotification, setLocalNotification] = useState({ message: '', type: '', visible: false });
+
+    // Update form fields if user data from context changes
     useEffect(() => {
         if (user) {
             setMapCenterLat(user.map_center_lat || 0.0);
@@ -30,7 +33,17 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
         }
     }, [user]);
 
-    // Close dropdown when clicking outside
+    // Effect to auto-hide local notification after 3 seconds
+    useEffect(() => {
+        let timer;
+        if (localNotification.visible) {
+            timer = setTimeout(() => {
+                setLocalNotification(prev => ({ ...prev, visible: false, message: '' }));
+            }, 3000);
+        }
+        return () => clearTimeout(timer);
+    }, [localNotification.visible]);
+
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -43,7 +56,6 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
         };
     }, []);
 
-    // Callback function to receive map changes from InsetMap
     const handleMapChange = (newCenter, newZoom) => {
         setMapCenterLat(newCenter.lat);
         setMapCenterLon(newCenter.lng);
@@ -52,24 +64,23 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
 
     const handleThemeSelect = (url) => {
         setMapTheme(url);
-        setIsDropdownOpen(false); // Close dropdown after selection
+        setIsDropdownOpen(false);
     };
 
     const handleSubmitMapSettings = async (e) => {
         e.preventDefault();
-        setNotification('', ''); // Clear previous notification
+        setLocalNotification({ message: '', type: '', visible: false }); // Clear previous local notification
 
-        // Basic validation for lat/lon
         if (isNaN(mapCenterLat) || mapCenterLat < -90 || mapCenterLat > 90) {
-            setNotification('Latitude must be a number between -90 and 90.', 'error');
+            setLocalNotification({ message: 'Latitude must be a number between -90 and 90.', type: 'error', visible: true });
             return;
         }
         if (isNaN(mapCenterLon) || mapCenterLon < -180 || mapCenterLon > 180) {
-            setNotification('Longitude must be a number between -180 and 180.', 'error');
+            setLocalNotification({ message: 'Longitude must be a number between -180 and 180.', type: 'error', visible: true });
             return;
         }
         if (isNaN(mapZoom) || mapZoom < 0 || mapZoom > 22) {
-            setNotification('Zoom must be a number between 0 and 22.', 'error');
+            setLocalNotification({ message: 'Zoom must be a number between 0 and 22.', type: 'error', visible: true });
             return;
         }
 
@@ -88,7 +99,7 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
         }
 
         if (Object.keys(updates).length === 0) {
-            setNotification('No changes to save.', 'info');
+            setLocalNotification({ message: 'No changes to save.', type: 'info', visible: true });
             return;
         }
 
@@ -105,14 +116,14 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
             if (res.ok) {
                 const data = await res.json();
                 updateMapSettings(data);
-                setNotification('Map settings updated successfully!', 'success');
+                setLocalNotification({ message: 'Map settings updated successfully!', type: 'success', visible: true });
             } else {
                 const errorData = await res.json();
-                setNotification(errorData.detail || 'Failed to update map settings.', 'error');
+                setLocalNotification({ message: errorData.detail || 'Failed to update map settings.', type: 'error', visible: true });
             }
         } catch (err) {
             console.error('Network or unexpected error:', err);
-            setNotification('An unexpected error occurred. Please try again.', 'error');
+            setLocalNotification({ message: 'An unexpected error occurred. Please try again.', type: 'error', visible: true });
         }
     };
 
@@ -206,11 +217,19 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
                         </div>
                     )}
                 </div>
-            </div> {/* End of scrollable content div */}
-
+            </div>
+            {/* Local Notification Display */}
+            {localNotification.visible && (
+                <div className={`text-center text-xs mt-2
+                                ${localNotification.type === 'success' ? 'text-green-600' :
+                                  localNotification.type === 'error' ? 'text-red-600' :
+                                  'text-blue-600'}`}>
+                    {localNotification.message}
+                </div>
+            )}
             <button
                 type="submit"
-                className="w-full bg-green-500 text-white py-2 px-4 rounded-md border border-green-400
+                className="w-full bg-green-500 text-white py-2 px-4 rounded-md border border-green-400 mt-4
                     hover:bg-green-400 hover:border-green-800 focus:outline-none focus:border-green-500
                     active:border-green-800 hover:cursor-pointer flex items-center justify-center"
             >

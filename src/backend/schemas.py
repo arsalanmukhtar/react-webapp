@@ -101,4 +101,6 @@ class TableSchema(BaseModel):
     name: str
     columns: List[ColumnSchema]
     geometry_type: Optional[str] = None # Added geometry_type field
+    srid: Optional[int] = None  # Added SRID field for spatial reference
+    feature_count: Optional[int] = None  # Added count field for number of rows
 

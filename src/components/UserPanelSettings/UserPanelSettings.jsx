@@ -8,32 +8,17 @@ import UserSettings from './UserSettings/UserSettings'; // New import for UserSe
 const UserPanelSettings = () => {
     const { user, token, updateUserProfile, updateMapSettings } = useAuth();
     const navigate = useNavigate();
+
     // Top-level active tab: 'user' or 'project'
     const [activeParentTab, setActiveParentTab] = useState('user');
-    const [notification, setNotification] = useState({ message: '', type: '', visible: false, translateY: '-full' });
 
-    // Effect to auto-hide notification after 3 seconds with animation
-    useEffect(() => {
-        let timer;
-        if (notification.visible) {
-            timer = setTimeout(() => {
-                setNotification(prev => ({ ...prev, translateY: '-full' }));
-            }, 2500); // Start slide-out after 2.5 seconds
-
-            const hideTimer = setTimeout(() => {
-                setNotification(prev => ({ ...prev, visible: false, message: '' }));
-            }, 3000); // Total 3 seconds until fully hidden
-
-            return () => {
-                clearTimeout(timer);
-                clearTimeout(hideTimer);
-            };
-        }
-    }, [notification.visible, notification.message]);
-
-    // Function to show notification with slide-in animation
-    const showNotification = (message, type) => {
-        setNotification({ message, type, visible: true, translateY: '0' });
+    // This setNotification function will be passed down to UserSettings
+    // and then to AccountSettingsForm/MapSettingsForm.
+    // The notification rendering logic is now handled locally within those forms.
+    const setNotification = (message, type) => {
+        // This function now acts as a simple pass-through or can be used for
+        // top-level notifications if needed, but for this request, it's simplified.
+        console.log(`Notification: ${type} - ${message}`);
     };
 
     return (
@@ -70,25 +55,11 @@ const UserPanelSettings = () => {
                         </button>
                     </nav>
                 </div>
-                {/* Removed the "Back to Map" button from here */}
             </div>
 
             {/* Right Content Area */}
             <div className="flex-1 p-4 overflow-y-auto">
                 <div className="bg-white border border-gray-200 shadow-lg rounded-xl p-4 relative flex flex-col h-full">
-                    {/* Removed duplicate tabs for Account Settings and Map Settings */}
-                    {/* Consolidated Message Display at the top center of the main container */}
-                    {notification.visible && (
-                        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 p-3 rounded-md shadow-lg text-sm transition-transform duration-500 ease-out
-                                ${notification.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' :
-                                notification.type === 'error' ? 'bg-red-100 text-red-800 border border-red-300' :
-                                    'bg-blue-100 text-blue-800 border border-blue-300'}
-                                transform ${notification.translateY === '0' ? 'translate-y-0' : '-translate-y-full'}
-                                `}>
-                            <p className="text-center">{notification.message}</p>
-                        </div>
-                    )}
-
                     {/* Render active parent tab content */}
                     {activeParentTab === 'user' && (
                         <UserSettings
@@ -96,7 +67,7 @@ const UserPanelSettings = () => {
                             token={token}
                             updateUserProfile={updateUserProfile}
                             updateMapSettings={updateMapSettings}
-                            setNotification={showNotification}
+                            setNotification={setNotification} // Pass the setNotification function
                         />
                     )}
 
@@ -106,7 +77,6 @@ const UserPanelSettings = () => {
                             <p>Content for Project Settings will go here.</p>
                             <p className="mt-4 text-sm">This component is a placeholder for future development.</p>
                         </div>
-                        // <ProjectSettings /> // Uncomment and import when ProjectSettings component is ready
                     )}
                 </div>
             </div>

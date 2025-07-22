@@ -190,8 +190,32 @@ async def get_layers_tables():
                         comment=col.get('comment')
                     ))
                 
-                tables_data.append(TableSchema(name=table_name, columns=columns_data, geometry_type=table_geometry_type))
-        
+                # tables_data.append(TableSchema(name=table_name, columns=columns_data, geometry_type=table_geometry_type))
+
+                # Query SRID for the table (assuming 'geom' column exists)
+                srid_query = text(f"""
+                    SELECT DISTINCT ST_SRID(geom)
+                    FROM layers.{table_name}
+                    LIMIT 1;
+                """)
+                srid_result = connection.execute(srid_query).fetchone()
+                srid_value = srid_result[0] if srid_result else None
+
+                # Query row count for the table
+                count_query = text(f"""
+                    SELECT COUNT(*) FROM layers.{table_name};
+                """)
+                count_result = connection.execute(count_query).fetchone()
+                count_value = count_result[0] if count_result else None
+
+                tables_data.append(TableSchema(
+                    name=table_name,
+                    columns=columns_data,
+                    geometry_type=table_geometry_type,
+                    srid=srid_value,
+                    feature_count=count_value
+                ))
+
         return tables_data
     except Exception as e:
         raise HTTPException(
