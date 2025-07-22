@@ -151,7 +151,7 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
                             type="number"
                             id="mapCenterLat"
                             step="any"
-                            className="mt-1 block w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm placeholder-zinc-400 focus:outline-none focus:border-green-500"
+                            className="text-sm font-light text-gray-500 mt-1 block w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm placeholder-zinc-400 focus:outline-none focus:border-green-500"
                             value={mapCenterLat}
                             onChange={(e) => setMapCenterLat(parseFloat(e.target.value))}
                         />
@@ -164,7 +164,7 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
                             type="number"
                             id="mapCenterLon"
                             step="any"
-                            className="mt-1 block w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm placeholder-zinc-400 focus:outline-none focus:border-green-500"
+                            className="text-sm font-light text-gray-500 mt-1 block w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm placeholder-zinc-400 focus:outline-none focus:border-green-500"
                             value={mapCenterLon}
                             onChange={(e) => setMapCenterLon(parseFloat(e.target.value))}
                         />
@@ -177,7 +177,7 @@ const MapSettingsForm = ({ user, token, updateMapSettings, setNotification }) =>
                             type="number"
                             id="mapZoom"
                             step="0.1"
-                            className="mt-1 block w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm placeholder-zinc-400 focus:outline-none focus:border-green-500"
+                            className="text-sm font-light text-gray-500 mt-1 block w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm placeholder-zinc-400 focus:outline-none focus:border-green-500"
                             value={mapZoom}
                             onChange={(e) => setMapZoom(parseFloat(e.target.value))}
                         />

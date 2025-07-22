@@ -76,7 +76,7 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap, catalog
                 addLayerToMap({
                     name: prettyPrintName(table.name),
                     original_name: table.name,
-                    layer_type: 'catalog',
+                    type: 'catalog',
                     geometry_type: capitalizeFirstLetter(table.geometry_type),
                     srid: table.srid ? String(table.srid) : 'N/A',
                     feature_count: table.feature_count !== undefined ? table.feature_count : 'N/A',

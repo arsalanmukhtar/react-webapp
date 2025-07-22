@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import { FiLayers, FiList, FiDatabase, FiInfo, FiMapPin, FiLayers as FiFeature } from 'react-icons/fi';
 import './LeftSidebar.css';
 import DataExplorerModal from './DataExplorerModal/DataExplorerModal';
@@ -49,6 +50,7 @@ const LeftSidebar = () => {
     const [dataExplorerModalType, setDataExplorerModalType] = useState(null);
 
     const [activeMapLayers, setActiveMapLayers] = useState([]);
+    const { user, token } = useAuth();
     const [selectedLayerForInfo, setSelectedLayerForInfo] = useState(null); // State for info panel
 
     // Catalog tables state
@@ -84,6 +86,27 @@ const LeftSidebar = () => {
         fetchTables();
     }, []);
 
+    // Fetch user layers from backend on login
+    useEffect(() => {
+        if (!user || !token) return;
+        const fetchUserLayers = async () => {
+            try {
+                const res = await fetch('/api/data/users/me/map_layers', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const layers = await res.json();
+                    setActiveMapLayers(layers.map(l => ({ ...l, isVisible: l.is_visible, isSelectedForInfo: l.is_selected_for_info })));
+                } else {
+                    setActiveMapLayers([]);
+                }
+            } catch (err) {
+                setActiveMapLayers([]);
+            }
+        };
+        fetchUserLayers();
+    }, [user, token]);
+
     const toggleLayer = (layerName) => {
         setActiveLayer(prevActiveLayer => {
             const newActiveLayer = prevActiveLayer === layerName ? null : layerName;
@@ -107,50 +130,103 @@ const LeftSidebar = () => {
         setActiveLayer('dataExplorer');
     };
 
-    const addLayerToMap = (layerData) => {
-        setActiveMapLayers(prevLayers => {
-            // Log original layer name when added
-            if (layerData.type === 'catalog' && layerData.original_name) {
-                console.log(`Adding catalog layer: ${layerData.original_name}`);
-            } else if (layerData.type === 'geojson' && layerData.name) {
-                console.log(`Adding GeoJSON layer: ${layerData.name}`);
+    // Add layer to DB and state
+    const addLayerToMap = async (layerData) => {
+        if (!token) return;
+        // Map frontend fields to backend schema
+        const payload = {
+            name: layerData.name,
+            original_name: layerData.original_name || layerData.name,
+            layer_type: layerData.layer_type || layerData.type || 'catalog',
+            geometry_type: layerData.geometry_type || null,
+            is_visible: layerData.is_visible !== undefined ? layerData.is_visible : true,
+            is_selected_for_info: layerData.is_selected_for_info !== undefined ? layerData.is_selected_for_info : false,
+            color: layerData.color || '#000000',
+            srid: layerData.srid || null,
+            feature_count: layerData.feature_count !== undefined ? layerData.feature_count : null
+        };
+        try {
+            const res = await fetch('/api/data/users/me/map_layers', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+                const newLayer = await res.json();
+                setActiveMapLayers(prevLayers => [...prevLayers, { ...newLayer, isVisible: newLayer.is_visible, isSelectedForInfo: newLayer.is_selected_for_info }]);
             }
-
-            // Check if layer with same name already exists to prevent duplicates
-            if (prevLayers.some(layer => layer.name === layerData.name)) {
-                return prevLayers; // Don't add if already exists
-            }
-            return [...prevLayers, { ...layerData, isVisible: true, isSelectedForInfo: false, color: '#000000' }]; // Add new layer, default to visible and black color
-        });
-    };
-
-    const toggleLayerVisibility = (layerName) => {
-        setActiveMapLayers(prevLayers =>
-            prevLayers.map(layer =>
-                layer.name === layerName ? { ...layer, isVisible: !layer.isVisible } : layer
-            )
-        );
-        console.log(`Toggling visibility for layer: ${layerName}`);
-    };
-
-    // Function to handle selection of a layer for info display
-    const handleSelectLayerForInfo = (layer) => {
-        // If the clicked layer is already selected, deselect it (toggle off)
-        if (selectedLayerForInfo && selectedLayerForInfo.name === layer.name) {
-            setSelectedLayerForInfo(null);
-            setActiveMapLayers(prevLayers =>
-                prevLayers.map(l => ({ ...l, isSelectedForInfo: false }))
-            );
-        } else {
-            // Otherwise, select the new layer
-            setSelectedLayerForInfo(layer);
-            setActiveMapLayers(prevLayers =>
-                prevLayers.map(l => ({
-                    ...l,
-                    isSelectedForInfo: l.name === layer.name ? true : false
-                }))
-            );
+        } catch (err) {
+            // handle error
         }
+    };
+
+    // Toggle visibility in DB and state
+    const toggleLayerVisibility = async (layerName) => {
+        const layer = activeMapLayers.find(l => l.name === layerName);
+        if (!layer || !token) return;
+        try {
+            const res = await fetch(`/api/data/users/me/map_layers/${layer.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ is_visible: !layer.isVisible })
+            });
+            if (res.ok) {
+                setActiveMapLayers(prevLayers => prevLayers.map(l => l.id === layer.id ? { ...l, isVisible: !l.isVisible } : l));
+            }
+        } catch (err) {}
+    };
+
+    // Select layer for info and update DB
+    const handleSelectLayerForInfo = async (layer) => {
+        if (!token) return;
+        if (selectedLayerForInfo && selectedLayerForInfo.id === layer.id) {
+            setSelectedLayerForInfo(null);
+            setActiveMapLayers(prevLayers => prevLayers.map(l => ({ ...l, isSelectedForInfo: false })));
+            // Optionally update DB to deselect
+            await fetch(`/api/data/users/me/map_layers/${layer.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ is_selected_for_info: false })
+            });
+        } else {
+            setSelectedLayerForInfo(layer);
+            setActiveMapLayers(prevLayers => prevLayers.map(l => ({ ...l, isSelectedForInfo: l.id === layer.id }))); 
+            // Update DB to select
+            await fetch(`/api/data/users/me/map_layers/${layer.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ is_selected_for_info: true })
+            });
+        }
+    };
+
+    // Delete layer from DB and state
+    const handleDeleteLayer = async (layerId) => {
+        if (!token) return;
+        try {
+            const res = await fetch(`/api/data/users/me/map_layers/${layerId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                setActiveMapLayers(prevLayers => prevLayers.filter(l => l.id !== layerId));
+                if (selectedLayerForInfo && selectedLayerForInfo.id === layerId) {
+                    setSelectedLayerForInfo(null);
+                }
+            }
+        } catch (err) {}
     };
 
 
@@ -203,10 +279,11 @@ const LeftSidebar = () => {
                                 <div className="space-y-2">
                                     {activeMapLayers.map(layer => (
                                         <LayerItem
-                                            key={layer.name}
+                                            key={layer.id}
                                             layer={layer}
                                             onToggleVisibility={toggleLayerVisibility}
                                             onSelectLayerForInfo={handleSelectLayerForInfo}
+                                            onDeleteLayer={handleDeleteLayer}
                                         />
                                     ))}
                                 </div>

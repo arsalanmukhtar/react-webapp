@@ -1,8 +1,7 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, Text # Import Text for XML/large string
+from sqlalchemy import Column, Integer, String, Boolean, Float, Text, ForeignKey # Import Text for XML/large string and ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.types import DateTime
 from .database import Base
-
 
 class User(Base):
     """
@@ -44,3 +43,29 @@ class User(Base):
         """
         return f"<User(id={self.id}, username='{self.username}', email='{self.email}')>"
 
+
+# --- MapLayer Model ---
+class MapLayer(Base):
+    __tablename__ = "map_layers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    original_name = Column(String(255), nullable=True)
+    layer_type = Column(String(50), nullable=False)
+    geometry_type = Column(String(50), nullable=True)
+    is_visible = Column(Boolean, default=True)
+    is_selected_for_info = Column(Boolean, default=False)
+    color = Column(String(7), default="#000000")
+    srid = Column(String(50), nullable=True)
+    feature_count = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        # Unique constraint for (user_id, name)
+        {'sqlite_autoincrement': True},
+    )
+
+    def __repr__(self):
+        return f"<MapLayer(id={self.id}, user_id={self.user_id}, name='{self.name}', is_visible={self.is_visible})>"

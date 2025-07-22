@@ -104,3 +104,30 @@ class TableSchema(BaseModel):
     srid: Optional[int] = None  # Added SRID field for spatial reference
     feature_count: Optional[int] = None  # Added count field for number of rows
 
+class MapLayerBase(BaseModel):
+    name: str
+    original_name: Optional[str] = None
+    layer_type: str
+    geometry_type: Optional[str] = None
+    is_visible: Optional[bool] = True
+    is_selected_for_info: Optional[bool] = False
+    color: Optional[str] = "#000000"
+    srid: Optional[str] = None
+    feature_count: Optional[int] = None
+
+class MapLayerCreate(MapLayerBase):
+    pass
+
+class MapLayerUpdate(BaseModel):
+    is_visible: Optional[bool] = None
+    is_selected_for_info: Optional[bool] = None
+    color: Optional[str] = None
+
+class MapLayerResponse(MapLayerBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True

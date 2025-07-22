@@ -11,8 +11,8 @@ from sqlalchemy import inspect, text # Import text for raw SQL queries
 from typing import Dict, Optional, List, Any
 
 from .database import get_db, engine
-from .models import User
-from .schemas import UserResponse, UserSettingsUpdate, MapSettingsUpdate, TableSchema, ColumnSchema
+from .models import User, MapLayer
+from .schemas import UserResponse, UserSettingsUpdate, MapSettingsUpdate, TableSchema, ColumnSchema, MapLayerResponse, MapLayerCreate, MapLayerUpdate
 from .auth import (
     get_current_user,
     get_password_hash
@@ -223,3 +223,52 @@ async def get_layers_tables():
             detail=f"Failed to retrieve tables from 'layers' schema: {e}"
         )
 
+# --- Map Layers CRUD Endpoints ---
+@router.get("/users/me/map_layers", response_model=List[MapLayerResponse], dependencies=[Depends(get_current_user)])
+async def get_user_map_layers(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Get all map layers for the current user.
+    """
+    layers = db.query(MapLayer).filter(MapLayer.user_id == current_user.id).all()
+    return layers
+
+@router.post("/users/me/map_layers", response_model=MapLayerResponse, dependencies=[Depends(get_current_user)])
+async def add_user_map_layer(layer: MapLayerCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Add a new map layer for the current user. Unique by (user_id, name).
+    """
+    db_layer = MapLayer(**layer.dict(), user_id=current_user.id)
+    db.add(db_layer)
+    try:
+        db.commit()
+        db.refresh(db_layer)
+        return db_layer
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Layer with this name already exists for this user.")
+
+@router.patch("/users/me/map_layers/{layer_id}", response_model=MapLayerResponse, dependencies=[Depends(get_current_user)])
+async def update_user_map_layer(layer_id: int, layer_update: MapLayerUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Update a map layer's state (is_visible, is_selected_for_info, color) for the current user.
+    """
+    db_layer = db.query(MapLayer).filter(MapLayer.id == layer_id, MapLayer.user_id == current_user.id).first()
+    if not db_layer:
+        raise HTTPException(status_code=404, detail="Layer not found.")
+    for key, value in layer_update.dict(exclude_unset=True).items():
+        setattr(db_layer, key, value)
+    db.commit()
+    db.refresh(db_layer)
+    return db_layer
+
+@router.delete("/users/me/map_layers/{layer_id}", response_model=dict, dependencies=[Depends(get_current_user)])
+async def delete_user_map_layer(layer_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Delete a map layer for the current user.
+    """
+    db_layer = db.query(MapLayer).filter(MapLayer.id == layer_id, MapLayer.user_id == current_user.id).first()
+    if not db_layer:
+        raise HTTPException(status_code=404, detail="Layer not found.")
+    db.delete(db_layer)
+    db.commit()
+    return {"detail": "Layer deleted."}
