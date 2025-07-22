@@ -98,6 +98,12 @@ const LeftSidebar = () => {
                 if (res.ok) {
                     const layers = await res.json();
                     setActiveMapLayers(layers.map(l => ({ ...l, isVisible: l.is_visible })));
+                    // Console log tile paths for all layers for this user
+                    layers.forEach(layer => {
+                        if (layer.original_name) {
+                            console.log(`${window.location.origin}/mvt/layers/${layer.original_name}/z/x/y.pbf`);
+                        }
+                    });
                 } else {
                     setActiveMapLayers([]);
                 }
@@ -158,6 +164,10 @@ const LeftSidebar = () => {
                 const newLayer = await res.json();
                 setActiveMapLayers(prevLayers => [...prevLayers, { ...newLayer, isVisible: newLayer.is_visible }]);
                 setActiveLayer('layers'); // Show the Layers panel after adding
+                // Console log the tile path for the new layer
+                if (newLayer.original_name) {
+                    console.log(`${window.location.origin}/mvvt/layers/${newLayer.original_name}/z/x/y.pbf`);
+                }
             }
         } catch (err) {
             // handle error
