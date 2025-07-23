@@ -1,6 +1,4 @@
-# app/routes.py
-
-
+from fastapi import Query# app/routes.py
 from fastapi import APIRouter, HTTPException, Response
 from typing import Dict, List
 from . import tiling_operations as tile_ops
@@ -26,6 +24,19 @@ async def update_layer_state(state: MapLayerState):
         },
         "message": "Layer state received and logged."
     }
+
+
+# Route to convert lat/lon/zoom to tile z/x/y
+@router.get("/tile-coords")
+async def latlon_to_tile(
+    lat: float = Query(..., description="Latitude"),
+    lon: float = Query(..., description="Longitude"),
+    zoom: int = Query(..., description="Zoom level"),
+):
+    """
+    Convert latitude, longitude, and zoom to tile z, x, y numbers.
+    """
+    return tile_ops.latlon_to_tile_coords(lat, lon, zoom)
 
 
 @router.get("/mvt/{table}/{z}/{x}/{y}.pbf")

@@ -54,6 +54,15 @@ def get_geometry_type_from_db(table: str) -> Optional[str]:
         """)).fetchone()
         return result[0] if result else None
 
+
+def latlon_to_tile_coords(lat: float, lon: float, zoom: int):
+    """
+    Given latitude, longitude, and zoom, return the corresponding tile z, x, y.
+    """
+    tile = mercantile.tile(lon, lat, zoom)
+    return {"z": tile.z, "x": tile.x, "y": tile.y}
+
+
 def get_mvt_tile_from_db(table: str, z: int, x: int, y: int) -> Optional[bytes]:
     engine = get_engine()
     geom_column = get_geometry_column(table)

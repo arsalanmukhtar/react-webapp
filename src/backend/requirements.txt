@@ -9,3 +9,5 @@ email-validator
 aiosmtplib
 psycopg2-binary
 python-multipart
+mercantile
+pydantic
