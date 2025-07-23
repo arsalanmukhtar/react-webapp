@@ -6,42 +6,21 @@ import DataExplorerModal from './DataExplorerModal/DataExplorerModal';
 import { DataExplorerOptions } from './DataExplorerData';
 import LayerItem from './LayerItem';
 
-// Helper component for rendering geometry icons
-const GeometryIcon = ({ type, color = 'currentColor', size = 16 }) => {
-    // Log the type prop to debug its value
-    console.log("GeometryIcon received type:", type);
+import SidebarIconBar from './SidebarIconBar';
+import LayersPanel from './LayersPanel';
+import LegendPanel from './LegendPanel';
+import DataExplorerPanel from './DataExplorerPanel';
+import {
+  toggleLayer as toggleLayerFn,
+  openDataExplorerModal as openDataExplorerModalFn,
+  addLayerToMap as addLayerToMapFn,
+  toggleLayerVisibility as toggleLayerVisibilityFn,
+  handleSelectLayerForInfo as handleSelectLayerForInfoFn,
+  handleDeleteLayer as handleDeleteLayerFn
+} from './LeftSidebarFunctions';
 
-    // Convert type to lowercase for case-insensitive comparison
-    const normalizedType = type ? type.toLowerCase() : '';
 
-    switch (normalizedType) {
-        case 'point':
-        case 'multipoint':
-            return (
-                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="6" fill={color} />
-                </svg>
-            );
-        case 'linestring':
-        case 'multilinestring':
-            return (
-                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    {/* Increased stroke width for better visibility */}
-                    <path d="M4 12L20 12" stroke={color} strokeWidth="8" strokeLinecap="round" />
-                </svg>
-            );
-        case 'polygon':
-        case 'multipolygon':
-            return (
-                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    {/* Changed to solid fill and made the square fill the entire viewBox */}
-                    <rect x="0" y="0" width="24" height="24" fill={color} />
-                </svg>
-            );
-        default:
-            return <FiInfo size={size} color={color} />; // Default icon for unknown types
-    }
-};
+import GeometryIcon from './GeometryIcon';
 
 const LeftSidebar = () => {
 
@@ -98,12 +77,6 @@ const LeftSidebar = () => {
                 if (res.ok) {
                     const layers = await res.json();
                     setActiveMapLayers(layers.map(l => ({ ...l, isVisible: l.is_visible })));
-                    // Console log tile paths for all layers for this user
-                    layers.forEach(layer => {
-                        if (layer.original_name) {
-                            console.log(`${window.location.origin}/mvt/layers/${layer.original_name}/z/x/y.pbf`);
-                        }
-                    });
                 } else {
                     setActiveMapLayers([]);
                 }
@@ -114,247 +87,39 @@ const LeftSidebar = () => {
         fetchUserLayers();
     }, [user, token]);
 
-    const toggleLayer = (layerName) => {
-        setActiveLayer(prevActiveLayer => {
-            const newActiveLayer = prevActiveLayer === layerName ? null : layerName;
 
-            // If switching away from 'layers' panel or collapsing the sidebar
-            if (newActiveLayer !== 'layers') {
-                setSelectedLayerForInfo(null); // Clear selected layer info
-                // Remove highlight from all layers
-                setActiveMapLayers(prevLayers =>
-                    prevLayers.map(l => ({ ...l, isSelectedForInfo: false }))
-                );
-            }
-            setIsDataExplorerModalOpen(false); // Always close modal when toggling main sidebar panels
-            return newActiveLayer;
-        });
-    };
-
-    const openDataExplorerModal = (type) => {
-        setDataExplorerModalType(type);
-        setIsDataExplorerModalOpen(true);
-        setActiveLayer('dataExplorer');
-    };
-
-    // Add layer to DB and state
-    const addLayerToMap = async (layerData) => {
-        if (!token) return;
-        // Map frontend fields to backend schema
-        const payload = {
-            name: layerData.name,
-            original_name: layerData.original_name || layerData.name,
-            layer_type: layerData.layer_type || layerData.type || 'catalog',
-            geometry_type: layerData.geometry_type || null,
-            is_visible: layerData.is_visible !== undefined ? layerData.is_visible : true,
-            color: layerData.color || '#000000',
-            srid: layerData.srid || null,
-            feature_count: layerData.feature_count !== undefined ? layerData.feature_count : null
-        };
-        try {
-            const res = await fetch('/api/data/users/me/map_layers', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(payload)
-            });
-            if (res.ok) {
-                const newLayer = await res.json();
-                setActiveMapLayers(prevLayers => [...prevLayers, { ...newLayer, isVisible: newLayer.is_visible }]);
-                setActiveLayer('layers'); // Show the Layers panel after adding
-                // Console log the tile path for the new layer
-                if (newLayer.original_name) {
-                    console.log(`${window.location.origin}/mvvt/layers/${newLayer.original_name}/z/x/y.pbf`);
-                }
-            }
-        } catch (err) {
-            // handle error
-        }
-    };
-
-    // Toggle visibility in DB and state
-    const toggleLayerVisibility = async (layerName) => {
-        const layer = activeMapLayers.find(l => l.name === layerName);
-        if (!layer || !token) return;
-        try {
-            const res = await fetch(`/api/data/users/me/map_layers/${layer.id}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ is_visible: !layer.isVisible })
-            });
-            if (res.ok) {
-                setActiveMapLayers(prevLayers => prevLayers.map(l => l.id === layer.id ? { ...l, isVisible: !l.isVisible } : l));
-            }
-        } catch (err) {}
-    };
-
-    // Select layer for info (frontend only) and highlight
-    const handleSelectLayerForInfo = (layer) => {
-        if (selectedLayerForInfo && selectedLayerForInfo.id === layer.id) {
-            setSelectedLayerForInfo(null);
-            setSelectedLayerId(null);
-        } else {
-            setSelectedLayerForInfo(layer);
-            setSelectedLayerId(layer.id);
-        }
-    };
-
-    // Delete layer from DB and state
-    const handleDeleteLayer = async (layerId) => {
-        if (!token) return;
-        try {
-            const res = await fetch(`/api/data/users/me/map_layers/${layerId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                setActiveMapLayers(prevLayers => prevLayers.filter(l => l.id !== layerId));
-                if (selectedLayerForInfo && selectedLayerForInfo.id === layerId) {
-                    setSelectedLayerForInfo(null);
-                }
-            }
-        } catch (err) {}
-    };
+    // Bind imported helper functions to local state/props
+    const toggleLayer = toggleLayerFn(setActiveLayer, setSelectedLayerForInfo, setActiveMapLayers, setIsDataExplorerModalOpen);
+    const openDataExplorerModal = openDataExplorerModalFn(setDataExplorerModalType, setIsDataExplorerModalOpen, setActiveLayer);
+    const addLayerToMap = addLayerToMapFn(token, setActiveMapLayers, setActiveLayer);
+    const toggleLayerVisibility = toggleLayerVisibilityFn(activeMapLayers, token, setActiveMapLayers);
+    const handleSelectLayerForInfo = handleSelectLayerForInfoFn(selectedLayerForInfo, setSelectedLayerForInfo, setSelectedLayerId);
+    const handleDeleteLayer = handleDeleteLayerFn(token, setActiveMapLayers, selectedLayerForInfo, setSelectedLayerForInfo);
 
 
     const isExpanded = activeLayer !== null;
 
     return (
         <div className="fixed top-[50px] left-0 flex z-40 h-[calc(100vh-50px)]">
-            {/* Icon Bar - Reduced width when collapsed, maintains w-20 for icons */}
-            <div className={`flex flex-col items-center py-4 bg-white text-gray-700 shadow-lg transition-all duration-300 ease-in-out w-12 justify-between relative`}>
-                <div className="flex flex-col items-center">
-                    <button
-                        onClick={() => toggleLayer('layers')}
-                        className={`p-2 rounded-lg mb-4 transition-colors duration-200 cursor-pointer text-base
-                                    ${activeLayer === 'layers' ? 'bg-green-500 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-                        title="Layers"
-                    >
-                        <FiLayers size={22} />
-                    </button>
-
-                    <button
-                        onClick={() => toggleLayer('list')}
-                        className={`p-2 rounded-lg mb-4 transition-colors duration-200 cursor-pointer text-base
-                                    ${activeLayer === 'list' ? 'bg-green-500 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-                        title="Data List"
-                    >
-                        <FiList size={22} />
-                    </button>
-                </div>
-
-                <button
-                    onClick={() => toggleLayer('dataExplorer')}
-                    className={`p-2 rounded-lg transition-colors duration-200 cursor-pointer text-base
-                                ${activeLayer === 'dataExplorer' ? 'bg-green-500 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-                    title="Data Explorer"
-                >
-                    <FiDatabase size={22} />
-                </button>
-            </div>
-
-            {/* Content Panel - Increased width */}
-            <div className={`bg-white border-r border-gray-200 shadow-lg transition-all duration-300 ease-in-out overflow-hidden
-                            ${isExpanded ? 'w-80 opacity-100' : 'w-0 opacity-0'}`}>
+            <SidebarIconBar activeLayer={activeLayer} toggleLayer={toggleLayer} />
+            <div className={`bg-white border-r border-gray-200 shadow-lg transition-all duration-300 ease-in-out overflow-hidden ${isExpanded ? 'w-80 opacity-100' : 'w-0 opacity-0'}`}> 
                 {activeLayer === 'layers' && (
-                    <div className="p-4 h-full flex flex-col">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">Map Layers</h3>
-                        <div className="flex-1 overflow-y-auto pr-2">
-                            {activeMapLayers.length === 0 ? (
-                                <p className="text-gray-600">No layers added yet.</p>
-                            ) : (
-                                <div className="space-y-2">
-                                    {activeMapLayers.map(layer => (
-                                        <LayerItem
-                                            key={layer.id}
-                                            layer={layer}
-                                            isSelected={selectedLayerId === layer.id}
-                                            onToggleVisibility={toggleLayerVisibility}
-                                            onSelectLayerForInfo={handleSelectLayerForInfo}
-                                            onDeleteLayer={handleDeleteLayer}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Layer Info Panel at the bottom */}
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                            <h4 className="text-md font-semibold text-gray-800 mb-2">Layer Info</h4>
-                            {selectedLayerForInfo ? (
-                                <div className="space-y-1 text-xs">
-                                    <p className="font-medium text-green-500">{selectedLayerForInfo.name}</p>
-                                    <ul className="space-y-1">
-                                        <li className="flex items-center">
-                                            <FiInfo className="mr-2 text-gray-500" size={12} /> Source: {selectedLayerForInfo.type === 'catalog' ? 'Catalog Layer' : 'GeoJSON Upload'}
-                                        </li>
-                                        <li className="flex items-center">
-                                            <FiMapPin className="mr-2 text-gray-500" size={12} /> Geometry: {selectedLayerForInfo.geometry_type || 'N/A'}
-                                        </li>
-                                        <li className="flex items-center">
-                                            <FiInfo className="mr-2 text-gray-500" size={12} /> SRID: {selectedLayerForInfo.srid || 'N/A'}
-                                        </li>
-                                        <li className="flex items-center">
-                                            <FiFeature className="mr-2 text-gray-500" size={12} /> Features: {selectedLayerForInfo.feature_count !== undefined ? selectedLayerForInfo.feature_count : 'N/A'}
-                                        </li>
-                                    </ul>
-                                </div>
-                            ) : (
-                                <p className="text-gray-600 text-sm">Select a layer to view its details.</p>
-                            )}
-                        </div>
-                    </div>
+                    <LayersPanel
+                        activeMapLayers={activeMapLayers}
+                        selectedLayerId={selectedLayerId}
+                        selectedLayerForInfo={selectedLayerForInfo}
+                        toggleLayerVisibility={toggleLayerVisibility}
+                        handleSelectLayerForInfo={handleSelectLayerForInfo}
+                        handleDeleteLayer={handleDeleteLayer}
+                    />
                 )}
                 {activeLayer === 'list' && (
-                    <div className="p-4 h-full overflow-y-auto text-sm">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">Map Legend</h3>
-                        {activeMapLayers.length === 0 ? (
-                            <p className="text-gray-600">No layers added yet to the map.</p>
-                        ) : (
-                            <div className="space-y-4"> {/* Increased space between items */}
-                                {activeMapLayers.map(layer => (
-                                    <div key={layer.name}> {/* Individual div for each legend item */}
-                                        <div className="text-gray-800 text-sm font-medium mb-1">{layer.name}</div> {/* Layer name */}
-                                        <div className="flex items-center"> {/* Icon and type */}
-                                            <GeometryIcon type={layer.geometry_type} color={layer.color} size={18} />
-                                            <span className="ml-2 text-gray-600 text-xs">{layer.geometry_type || 'Unknown'}</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                    <LegendPanel activeMapLayers={activeMapLayers} />
                 )}
                 {activeLayer === 'dataExplorer' && (
-                    <div className="p-4 h-full flex flex-col justify-between text-sm">
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">Data Explorer</h3>
-                            <p className="text-gray-600">Select an option to explore data.</p>
-                        </div>
-                        <div className="space-y-2 mt-auto pb-4">
-                            {DataExplorerOptions.map((option) => {
-                                const Icon = option.icon;
-                                return (
-                                    <button
-                                        key={option.id}
-                                        onClick={() => openDataExplorerModal(option.id)}
-                                        className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-green-500 rounded-md transition-colors duration-200 bg-gray-50 cursor-pointer"
-                                    >
-                                        <Icon className="mr-2" size={16} />
-                                        {option.name}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
+                    <DataExplorerPanel openDataExplorerModal={openDataExplorerModal} />
                 )}
             </div>
-
             <DataExplorerModal
                 isOpen={isDataExplorerModalOpen}
                 onClose={() => setIsDataExplorerModalOpen(false)}

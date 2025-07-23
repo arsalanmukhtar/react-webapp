@@ -6,6 +6,7 @@ from fastapi.openapi.utils import get_openapi  # Import get_openapi
 from .database import create_db_tables
 from .auth_routes import router as auth_router
 from .data_routes import router as data_router
+from .tiling_routes import router as tiling_router
 
 
 # Define the lifespan context manager for startup/shutdown events
@@ -87,6 +88,8 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api")
 # Include the data routes under the /data prefix
 app.include_router(data_router, prefix="/api")
+# Include the tiling routes under the /tiling prefix
+app.include_router(tiling_router, prefix="/api")
 
 
 # You can add a simple root endpoint if desired
