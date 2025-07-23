@@ -20,10 +20,10 @@ const LayerItem = ({ layer, onToggleVisibility, onSelectLayerForInfo, onDeleteLa
     return (
         <div
             className={`flex items-center justify-between p-2 rounded-md border text-sm cursor-pointer
-                        ${isSelected ? 'bg-green-100 border-green-500' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}
+                        ${isSelected ? 'bg-green-100 border-green-500' : 'bg-neutral-100 border-transparent'}`}
             onClick={handleLayerClick}
         >
-            <span className={`flex-1 truncate ${!layer.isVisible ? 'text-gray-400 line-through' : ''}`}>
+            <span className={`flex-1 truncate ${!layer.isVisible ? 'text-gray-300' : ''}`}>
                 {layer.name}
             </span>
             <div className="flex items-center space-x-2">
