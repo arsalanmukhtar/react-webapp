@@ -44,9 +44,6 @@ export const addLayerToMap = (token, setActiveMapLayers, setActiveLayer) => asyn
             const newLayer = await res.json();
             setActiveMapLayers(prevLayers => [...prevLayers, { ...newLayer, isVisible: newLayer.is_visible }]);
             setActiveLayer('layers');
-            if (newLayer.original_name) {
-                console.log(`${window.location.origin}/mvvt/layers/${newLayer.original_name}/z/x/y.pbf`);
-            }
         }
     } catch (err) {}
 };
