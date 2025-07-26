@@ -129,9 +129,3 @@ class MapLayerResponse(MapLayerBase):
 
     class Config:
         orm_mode = True
-
-class MapLayerState(BaseModel):
-    table: str
-    z: int
-    x: int
-    y: int

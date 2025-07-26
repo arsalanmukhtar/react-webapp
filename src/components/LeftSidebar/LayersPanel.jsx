@@ -1,6 +1,6 @@
 import React from 'react';
 import LayerItem from './LayerItem';
-import TileUrlTest from './TileUrlTest';
+import TileUrlTest from '../MapAndControls/TileUrlTest';
 import { FiInfo, FiMapPin, FiLayers as FiFeature } from 'react-icons/fi';
 
 const LayersPanel = ({
@@ -27,7 +27,6 @@ const LayersPanel = ({
                 onSelectLayerForInfo={handleSelectLayerForInfo}
                 onDeleteLayer={handleDeleteLayer}
               />
-              <TileUrlTest layer={layer} />
             </div>
           ))}
         </div>
@@ -41,7 +40,7 @@ const LayersPanel = ({
           <p className="font-medium text-green-500">{selectedLayerForInfo.name}</p>
           <ul className="space-y-1">
             <li className="flex items-center">
-              <FiInfo className="mr-2 text-gray-500" size={12} /> Source: {selectedLayerForInfo.layer_type === 'catalog' ? 'Catalog Layer' : 'External Dataset'}
+              <FiInfo className="mr-2 text-gray-500" size={12} /> Source: {selectedLayerForInfo.type === 'catalog' ? 'Catalog Layer' : 'GeoJSON Upload'}
             </li>
             <li className="flex items-center">
               <FiMapPin className="mr-2 text-gray-500" size={12} /> Geometry: {selectedLayerForInfo.geometry_type || 'N/A'}

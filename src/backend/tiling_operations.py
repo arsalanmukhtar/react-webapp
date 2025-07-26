@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 
 
 def get_engine() -> Engine:
-    return create_engine(settings.DOCKER_DATABASE_URL)
+    return create_engine(settings.DATABASE_URL)
 
 def get_geometry_column(table: str) -> Optional[str]:
     engine = get_engine()

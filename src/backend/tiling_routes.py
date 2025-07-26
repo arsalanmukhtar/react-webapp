@@ -1,29 +1,49 @@
-from fastapi import Query# app/routes.py
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response, Request, Query, Depends
 from typing import Dict, List
 from . import tiling_operations as tile_ops
-from .schemas import MapLayerState
+from .auth import get_current_user
+from .database import SessionLocal
+from sqlalchemy import text
+import re
 
 router = APIRouter(
     prefix="/tiling",
     tags=["Tiling"]
 )
 
-
-@router.post("/layer-state")
-async def update_layer_state(state: MapLayerState):
+@router.get("/layer-state")
+async def get_layer_state(request: Request, user=Depends(get_current_user)):
     """Update and return the current layer state (for backend logging/display)"""
-    print(f"Backend received layer state: Table={state.table}, Tile={state.z}/{state.x}/{state.y}")
-    return {
-        "table": state.table,
-        "tile": {
-            "z": state.z,
-            "x": state.x,
-            "y": state.y,
-            "url": f"/tiling/mvt/{state.table}/{state.z}/{state.x}/{state.y}.pbf"
-        },
-        "message": "Layer state received and logged."
-    }
+
+    # Get the current browser URL from the query parameter (sent by frontend)
+    browser_url = request.query_params.get("browser_url", "")
+
+    query = text("SELECT original_name FROM map_layers WHERE user_id = :user_id")
+    db = SessionLocal()
+    try:
+        result = db.execute(query, {"user_id": user.id})
+        layer_names = [row[0] for row in result.fetchall()]
+    finally:
+        db.close()
+
+    def extract_zxy(url):
+        # Expect hash like #z/x/y
+        match = re.search(r'#(\d+)/(\d+)/(\d+)', url)
+        if match:
+            return match.group(1), match.group(2), match.group(3)
+        return 'z', 'x', 'y'
+
+    z, x, y = extract_zxy(browser_url)
+    # Use request.base_url to get the backend's origin (e.g., http://localhost:8000/)
+    origin = str(request.base_url).rstrip('/')
+    layers = [
+        {
+            "name": name,
+            "url": f"{origin}/api/tiling/mvt/layers/{name}/{z}/{x}/{y}.pbf"
+        }
+        for name in layer_names
+    ]
+    return {"layers": layers}
 
 
 # Route to convert lat/lon/zoom to tile z/x/y
