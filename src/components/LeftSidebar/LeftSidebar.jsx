@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { FiLayers, FiList, FiDatabase, FiInfo, FiMapPin, FiLayers as FiFeature } from 'react-icons/fi';
 import './LeftSidebar.css';
 import DataExplorerModal from './DataExplorerModal/DataExplorerModal';
-import { DataExplorerOptions } from './DataExplorerData';
-import LayerItem from './LayerItem';
 
 import SidebarIconBar from './SidebarIconBar';
 import LayersPanel from './LayersPanel';
 import LegendPanel from './LegendPanel';
 import DataExplorerPanel from './DataExplorerPanel';
+// Add notification state management
 import {
   toggleLayer as toggleLayerFn,
   openDataExplorerModal as openDataExplorerModalFn,
@@ -27,6 +25,7 @@ const LeftSidebar = () => {
     const [activeLayer, setActiveLayer] = useState(null);
     const [isDataExplorerModalOpen, setIsDataExplorerModalOpen] = useState(false);
     const [dataExplorerModalType, setDataExplorerModalType] = useState(null);
+    const [notification, setNotification] = useState({ message: '', type: '', visible: false });
 
     const [activeMapLayers, setActiveMapLayers] = useState([]);
     const { user, token } = useAuth();
@@ -39,6 +38,17 @@ const LeftSidebar = () => {
     const [catalogError, setCatalogError] = useState(null);
 
     // Fetch catalog tables only once on mount
+    // Auto-hide notifications after 3 seconds
+    useEffect(() => {
+        let timer;
+        if (notification.visible) {
+            timer = setTimeout(() => {
+                setNotification(prev => ({ ...prev, visible: false, message: '' }));
+            }, 3000);
+        }
+        return () => clearTimeout(timer);
+    }, [notification.visible]);
+
     useEffect(() => {
         const fetchTables = async () => {
             setCatalogLoading(true);
@@ -91,7 +101,7 @@ const LeftSidebar = () => {
     // Bind imported helper functions to local state/props
     const toggleLayer = toggleLayerFn(setActiveLayer, setSelectedLayerForInfo, setActiveMapLayers, setIsDataExplorerModalOpen);
     const openDataExplorerModal = openDataExplorerModalFn(setDataExplorerModalType, setIsDataExplorerModalOpen, setActiveLayer);
-    const addLayerToMap = addLayerToMapFn(token, setActiveMapLayers, setActiveLayer);
+    const addLayerToMap = addLayerToMapFn(token, setActiveMapLayers, setActiveLayer, setNotification);
     const toggleLayerVisibility = toggleLayerVisibilityFn(activeMapLayers, token, setActiveMapLayers);
     const handleSelectLayerForInfo = handleSelectLayerForInfoFn(selectedLayerForInfo, setSelectedLayerForInfo, setSelectedLayerId);
     const handleDeleteLayer = handleDeleteLayerFn(token, setActiveMapLayers, selectedLayerForInfo, setSelectedLayerForInfo);
@@ -117,7 +127,10 @@ const LeftSidebar = () => {
                     <LegendPanel activeMapLayers={activeMapLayers} />
                 )}
                 {activeLayer === 'dataExplorer' && (
-                    <DataExplorerPanel openDataExplorerModal={openDataExplorerModal} />
+                    <DataExplorerPanel 
+                        openDataExplorerModal={openDataExplorerModal} 
+                        notification={notification}
+                    />
                 )}
             </div>
             <DataExplorerModal

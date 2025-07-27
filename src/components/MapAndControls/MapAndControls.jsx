@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import TileUrlTest from './TileUrlTest';
 import Map from 'react-map-gl';
 import { FiPlus, FiMinus } from 'react-icons/fi';
 import { TiLocationArrowOutline } from 'react-icons/ti';
@@ -55,9 +54,6 @@ const MapAndControls = ({ user, isMapDashboardActive }) => {
             mapRef.current.rotateTo(0, { duration: 1000 });
         }
     };
-
-    // Call TileUrlTest for side-effect (console log), do not render any HTML
-    TileUrlTest({ layer: { original_name: 'dummy' } });
 
     return (
         <>

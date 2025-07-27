@@ -39,7 +39,7 @@ async def get_layer_state(request: Request, user=Depends(get_current_user)):
     layers = [
         {
             "name": name,
-            "url": f"{origin}/api/tiling/mvt/layers/{name}/{z}/{x}/{y}.pbf"
+            "url": f"{origin}/api/tiling/mvt/{name}/{{z}}/{{lat}}/{{lon}}.pbf"
         }
         for name in layer_names
     ]
@@ -60,11 +60,27 @@ async def latlon_to_tile(
 
 
 @router.get("/mvt/{table}/{z}/{x}/{y}.pbf")
-async def get_mvt_tile(table: str, z: int, x: int, y: int):
+async def get_mvt_tile(
+    table: str, 
+    z: float,  # This will be zoom level
+    x: float,  # This will be latitude 
+    y: float   # This will be longitude
+):
     try:
-        tile_data = tile_ops.get_mvt_tile_from_db(table, z, x, y)
+        # Treat z/x/y as zoom/lat/lon and convert to mercantile tile coordinates
+        zoom = int(z)
+        lat = x
+        lon = y
+        
+        # Convert lat/lon/zoom to mercantile tile coordinates
+        tile_coords = tile_ops.latlon_to_tile_coords(lat, lon, zoom)
+        tile_z = tile_coords["z"]
+        tile_x = tile_coords["x"] 
+        tile_y = tile_coords["y"]
+
+        tile_data = tile_ops.get_mvt_tile_from_db(table, tile_z, tile_x, tile_y)
         if not tile_data:
-            print(f"Server debug: No MVT data generated for layers.{table} tile {z}/{x}/{y}.")
+            print(f"Server debug: No MVT data generated for layers.{table} tile {tile_z}/{tile_x}/{tile_y} (from zoom={zoom}, lat={lat}, lon={lon}).")
             return Response(b'', media_type="application/x-protobuf")
         return Response(
             content=bytes(tile_data),

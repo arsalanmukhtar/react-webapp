@@ -19,7 +19,7 @@ export const openDataExplorerModal = (setDataExplorerModalType, setIsDataExplore
     setActiveLayer('dataExplorer');
 };
 
-export const addLayerToMap = (token, setActiveMapLayers, setActiveLayer) => async (layerData) => {
+export const addLayerToMap = (token, setActiveMapLayers, setActiveLayer, setNotification) => async (layerData) => {
     if (!token) return;
     const payload = {
         name: layerData.name,
@@ -32,6 +32,29 @@ export const addLayerToMap = (token, setActiveMapLayers, setActiveLayer) => asyn
         feature_count: layerData.feature_count !== undefined ? layerData.feature_count : null
     };
     try {
+        // First check if layer exists
+        const checkRes = await fetch('/api/data/users/me/map_layers', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (checkRes.ok) {
+            const existingLayers = await checkRes.json();
+            const duplicateLayer = existingLayers.find(layer => layer.original_name === payload.original_name);
+            
+            if (duplicateLayer) {
+                setNotification?.({
+                    message: `Layer already exists`,
+                    type: 'error',
+                    visible: true
+                });
+                setActiveLayer('dataExplorer'); // Switch to dataExplorer to show the notification
+                return;
+            }
+        }
+
         const res = await fetch('/api/data/users/me/map_layers', {
             method: 'POST',
             headers: {
@@ -40,12 +63,34 @@ export const addLayerToMap = (token, setActiveMapLayers, setActiveLayer) => asyn
             },
             body: JSON.stringify(payload)
         });
+        
         if (res.ok) {
             const newLayer = await res.json();
             setActiveMapLayers(prevLayers => [...prevLayers, { ...newLayer, isVisible: newLayer.is_visible }]);
-            setActiveLayer('layers');
+            setActiveLayer('dataExplorer'); // Switch to dataExplorer to show the notification
+            setNotification?.({
+                message: "Layer added successfully",
+                type: 'success',
+                visible: true
+            });
+        } else {
+            const errorData = await res.json();
+            setActiveLayer('dataExplorer'); // Switch to dataExplorer to show the notification
+            setNotification?.({
+                message: errorData.detail || 'Failed to add layer',
+                type: 'error',
+                visible: true
+            });
         }
-    } catch (err) {}
+    } catch (err) {
+        console.error('Error adding layer:', err);
+        setActiveLayer('dataExplorer'); // Switch to dataExplorer to show the notification
+        setNotification?.({
+            message: 'An unexpected error occurred while adding the layer',
+            type: 'error',
+            visible: true
+        });
+    }
 };
 
 export const toggleLayerVisibility = (activeMapLayers, token, setActiveMapLayers) => async (layerName) => {
