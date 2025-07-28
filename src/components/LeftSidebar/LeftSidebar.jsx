@@ -20,14 +20,13 @@ import {
 
 import GeometryIcon from './GeometryIcon';
 
-const LeftSidebar = () => {
+const LeftSidebar = ({ activeMapLayers, setActiveMapLayers }) => {
 
     const [activeLayer, setActiveLayer] = useState(null);
     const [isDataExplorerModalOpen, setIsDataExplorerModalOpen] = useState(false);
     const [dataExplorerModalType, setDataExplorerModalType] = useState(null);
     const [notification, setNotification] = useState({ message: '', type: '', visible: false });
 
-    const [activeMapLayers, setActiveMapLayers] = useState([]);
     const { user, token } = useAuth();
     const [selectedLayerForInfo, setSelectedLayerForInfo] = useState(null); // State for info panel
     const [selectedLayerId, setSelectedLayerId] = useState(null); // State for highlighted layer
@@ -75,28 +74,6 @@ const LeftSidebar = () => {
         };
         fetchTables();
     }, []);
-
-    // Fetch user layers from backend on login
-    useEffect(() => {
-        if (!user || !token) return;
-        const fetchUserLayers = async () => {
-            try {
-                const res = await fetch('/api/data/users/me/map_layers', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const layers = await res.json();
-                    setActiveMapLayers(layers.map(l => ({ ...l, isVisible: l.is_visible })));
-                } else {
-                    setActiveMapLayers([]);
-                }
-            } catch (err) {
-                setActiveMapLayers([]);
-            }
-        };
-        fetchUserLayers();
-    }, [user, token]);
-
 
     // Bind imported helper functions to local state/props
     const toggleLayer = toggleLayerFn(setActiveLayer, setSelectedLayerForInfo, setActiveMapLayers, setIsDataExplorerModalOpen);

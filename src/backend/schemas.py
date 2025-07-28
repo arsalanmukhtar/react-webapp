@@ -113,6 +113,9 @@ class MapLayerBase(BaseModel):
     color: Optional[str] = "#000000"
     srid: Optional[str] = None
     feature_count: Optional[int] = None
+    mapbox_type: Optional[str] = None
+    mapbox_source: Optional[dict] = None
+    mapbox_layer: Optional[dict] = None
 
 class MapLayerCreate(MapLayerBase):
     pass

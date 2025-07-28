@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, Text, ForeignKey # Import Text for XML/large string and ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, Float, Text, ForeignKey, JSON # Import JSON for JSONB fields
 from sqlalchemy.sql import func
 from sqlalchemy.types import DateTime
 from .database import Base
@@ -58,6 +58,9 @@ class MapLayer(Base):
     color = Column(String(7), default="#000000")
     srid = Column(String(50), nullable=True)
     feature_count = Column(Integer, nullable=True)
+    mapbox_type = Column(String(50), nullable=True)  # New: Mapbox layer type (circle, line, fill)
+    mapbox_source = Column(JSON, nullable=True)      # New: JSONB field for map.addSource definition
+    mapbox_layer = Column(JSON, nullable=True)       # New: JSONB field for map.addLayer definition
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

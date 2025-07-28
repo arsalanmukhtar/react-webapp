@@ -19,10 +19,37 @@ import PrivateRoute from './contexts/PrivateRoute';
 
 
 const AppContent = () => {
-    const { isAuthenticated, user } = useAuth();
+    const { isAuthenticated, user, token } = useAuth();
     const location = useLocation();
 
     const [activeSidebarLayer, setActiveSidebarLayer] = useState(null);
+    const [activeMapLayers, setActiveMapLayers] = useState([]);
+
+    // Fetch user layers when user logs in
+    useEffect(() => {
+        if (!user || !token) {
+            setActiveMapLayers([]);
+            return;
+        }
+        
+        const fetchUserLayers = async () => {
+            try {
+                const res = await fetch('/api/data/users/me/map_layers', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const layers = await res.json();
+                    const processedLayers = layers.map(l => ({ ...l, isVisible: l.is_visible }));
+                    setActiveMapLayers(processedLayers);
+                } else {
+                    setActiveMapLayers([]);
+                }
+            } catch (err) {
+                setActiveMapLayers([]);
+            }
+        };
+        fetchUserLayers();
+    }, [user, token]);
 
     const isMapDashboardActive = location.pathname === '/map-dashboard';
 
@@ -35,6 +62,7 @@ const AppContent = () => {
                 <MapAndControls
                     user={user}
                     isMapDashboardActive={isMapDashboardActive}
+                    activeMapLayers={activeMapLayers}
                 />
             )}
 
@@ -43,6 +71,8 @@ const AppContent = () => {
                 <LeftSidebar
                     activeLayer={activeSidebarLayer}
                     setActiveLayer={setActiveSidebarLayer}
+                    activeMapLayers={activeMapLayers}
+                    setActiveMapLayers={setActiveMapLayers}
                 />
             )}
 
