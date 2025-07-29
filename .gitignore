@@ -33,3 +33,6 @@ venv/
 
 # Database files
 database.py
+
+# Tiling files
+local_tile_cache/

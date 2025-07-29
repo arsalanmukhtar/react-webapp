@@ -1,5 +1,8 @@
 # app/db_operations.py
 
+import os
+import shutil # Used for clearing cache in example usage, remove if not needed in production
+import time   # Used for os.utime and time.sleep in mock/demo
 
 from sqlalchemy import create_engine, text, inspect, MetaData, Table, select, and_, func, distinct, column
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,6 +11,98 @@ from .config import settings
 import mercantile
 from typing import Dict, List, Optional, Tuple
 from .database import engine, get_db_connection
+
+# --- LOCAL FILE SYSTEM CACHE CONFIGURATION ---
+CACHE_DIR = "local_tile_cache"
+CACHE_LIMIT_GB = 10
+CACHE_LIMIT_BYTES = CACHE_LIMIT_GB * 1024 * 1024 * 1024 # 10 GB in bytes
+CLEAN_THRESHOLD_PERCENT = 0.90 # When cache exceeds limit, clean down to 90% of the limit
+
+# Ensure the base cache directory exists on module import
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+# --- CACHE HELPER FUNCTIONS ---
+
+def _get_dir_size(path: str) -> int:
+    """Calculates the total size of files within a directory recursively."""
+    total_size = 0
+    if not os.path.exists(path):
+        return 0
+    for dirpath, dirnames, filenames in os.walk(path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            # Skip if it's a symbolic link or if access is denied
+            if not os.path.islink(fp) and os.path.exists(fp):
+                try:
+                    total_size += os.path.getsize(fp)
+                except OSError as e:
+                    print(f"Warning: Could not get size of {fp}: {e}") # Consider using logging
+    return total_size
+
+def _get_all_files(directory: str) -> List[str]:
+    """Gets a list of all file paths in a directory recursively."""
+    file_paths = []
+    if not os.path.exists(directory):
+        return []
+    for dirpath, dirnames, filenames in os.walk(directory):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            if not os.path.islink(fp): # Ignore symlinks for eviction
+                file_paths.append(fp)
+    return file_paths
+
+def _clean_cache():
+    """
+    Cleans the cache by deleting the least recently accessed files
+    until the total cache size is below the target cleanup threshold.
+    """
+    current_size = _get_dir_size(CACHE_DIR)
+    print(f"Current cache size: {current_size / (1024*1024):.2f} MB / {CACHE_LIMIT_GB} GB")
+
+    if current_size <= CACHE_LIMIT_BYTES:
+        return # No cleaning needed if under the hard limit
+
+    print(f"Cache size exceeds {CACHE_LIMIT_GB} GB. Starting cleanup...")
+
+    # Get all files with their access times
+    files_with_atime = []
+    all_files = _get_all_files(CACHE_DIR)
+    for f_path in all_files:
+        try:
+            # os.path.getatime() gets the last access time
+            # For LRU, access time is usually more appropriate.
+            atime = os.path.getatime(f_path)
+            files_with_atime.append((f_path, atime))
+        except OSError as e:
+            print(f"Warning: Could not get access time for {f_path}: {e}") # Consider using logging
+            continue
+
+    # Sort files by access time (oldest first)
+    files_with_atime.sort(key=lambda x: x[1])
+
+    bytes_removed = 0
+    # Clean until we are below the target size (e.g., 90% of the limit)
+    cleanup_target = CACHE_LIMIT_BYTES * CLEAN_THRESHOLD_PERCENT
+
+    for f_path, _ in files_with_atime:
+        if current_size <= cleanup_target:
+            break # Stop cleaning once we are below the target
+
+        try:
+            file_size = os.path.getsize(f_path)
+            os.remove(f_path)
+            current_size -= file_size
+            bytes_removed += file_size
+            print(f"  Deleted: {f_path} (Size: {file_size / (1024*1024):.2f} MB)") # Consider using logging
+        except OSError as e:
+            print(f"Error deleting file {f_path}: {e}") # Consider using logging
+            pass # Keep going, try next file
+
+    print(f"Cleanup finished. Removed {bytes_removed / (1024*1024):.2f} MB.") # Consider using logging
+    print(f"New cache size: {current_size / (1024*1024):.2f} MB / {CACHE_LIMIT_GB} GB") # Consider using logging
+
+
+# --- ORIGINAL DB HELPER FUNCTIONS (UNCHANGED) ---
 
 def get_geometry_column(table: str) -> Optional[str]:
     with get_db_connection() as conn:
@@ -48,7 +143,6 @@ def get_geometry_type_from_db(table: str) -> Optional[str]:
         """)).fetchone()
         return result[0] if result else None
 
-
 def latlon_to_tile_coords(lat: float, lon: float, zoom: int):
     """
     Given latitude, longitude, and zoom, return the corresponding tile z, x, y.
@@ -56,11 +150,16 @@ def latlon_to_tile_coords(lat: float, lon: float, zoom: int):
     tile = mercantile.tile(lon, lat, zoom)
     return {"z": tile.z, "x": tile.x, "y": tile.y}
 
-
-def get_mvt_tile_from_db(table: str, z: int, x: int, y: int) -> Optional[bytes]:
+# --- ACTUAL DB FETCH FUNCTION (RENAMED TO BE PRIVATE) ---
+def _get_mvt_tile_from_db_actual(table: str, z: int, x: int, y: int) -> Optional[bytes]:
+    """
+    Internal function to fetch and generate an MVT tile directly from the database.
+    This is the original logic from your get_mvt_tile_from_db.
+    """
     geom_column = get_geometry_column(table)
     if not geom_column:
         raise ValueError("Geometry column not found.")
+    
     with engine.connect() as conn:
         attributes = conn.execute(text("""
             SELECT column_name
@@ -69,8 +168,7 @@ def get_mvt_tile_from_db(table: str, z: int, x: int, y: int) -> Optional[bytes]:
         """), {"table": table, "geom_column": geom_column}).fetchall()
         attributes_list = [row[0] for row in attributes]
         attributes_sql = ', '.join(f'"{attr}"' for attr in attributes_list) if attributes_list else "NULL"
-        # *** SECTION 4: UPDATED MVT TILING QUERY (PYTHON F-STRING) ***
-
+        
         query = f"""
             WITH bounds AS (SELECT ST_TileEnvelope(:z, :x, :y) AS geom),
                 features_data AS (
@@ -106,6 +204,54 @@ def get_mvt_tile_from_db(table: str, z: int, x: int, y: int) -> Optional[bytes]:
         
         result = conn.execute(text(query), {"z": z, "x": x, "y": y}).fetchone()
         return result[0] if result else None
+
+# --- PUBLIC MVT TILE FETCH FUNCTION WITH CACHING ---
+def get_mvt_tile_from_db(table: str, z: int, x: int, y: int) -> Optional[bytes]:
+    """
+    Fetches an MVT tile, using a local file system cache with a size limit.
+    If the tile is not in cache, it generates it from the database and stores it.
+    """
+    # Define the cache path for this tile
+    tile_dir = os.path.join(CACHE_DIR, table, str(z), str(x))
+    tile_path = os.path.join(tile_dir, f"{y}.mvt")
+
+    # 1. Try to fetch from local disk cache
+    if os.path.exists(tile_path):
+        try:
+            # Update access time to make it "recently used" for LRU eviction
+            os.utime(tile_path, None) 
+            print(f"✅ Served tile {table}/{z}/{x}/{y} from local disk cache.")
+            with open(tile_path, "rb") as f:
+                return f.read()
+        except OSError as e:
+            print(f"Error accessing cached tile {tile_path}: {e}. Regenerating...")
+            # Fall through to regeneration if cached tile is inaccessible
+
+    # 2. Cache miss: Generate from database
+    print(f"Cache miss for tile {table}/{z}/{x}/{y}. Generating from DB...")
+    
+    # Ensure the directory structure for this tile exists
+    os.makedirs(tile_dir, exist_ok=True)
+
+    # Call the actual DB fetching function (renamed private function)
+    tile_data = _get_mvt_tile_from_db_actual(table, z, x, y)
+
+    # 3. If generated successfully, store in local disk cache and then clean
+    if tile_data:
+        try:
+            with open(tile_path, "wb") as f:
+                f.write(tile_data)
+            print(f"💾 Stored tile {table}/{z}/{x}/{y} to local disk cache.")
+            
+            # After writing, check and clean cache if needed
+            _clean_cache() 
+        except OSError as e:
+            print(f"Error writing tile {tile_path} to cache: {e}") # Consider logging
+            # Do not return None, still return the generated tile even if caching failed
+    
+    return tile_data
+
+# --- REMAINING ORIGINAL DB HELPER FUNCTIONS (UNCHANGED) ---
 
 def get_table_extent_from_db(table: str) -> Optional[Dict[str, float]]:
     geom_column = get_geometry_column(table)
