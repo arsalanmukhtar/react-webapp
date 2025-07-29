@@ -62,26 +62,36 @@ async def latlon_to_tile(
 @router.get("/mvt/{table}/{z}/{x}/{y}.pbf")
 async def get_mvt_tile(
     table: str, 
-    z: float,  # This will be zoom level
-    x: float,  # This will be latitude 
-    y: float   # This will be longitude
+    z: int,  # Tile zoom level
+    x: int,  # Tile X coordinate 
+    y: int   # Tile Y coordinate
 ):
     try:
-        # Treat z/x/y as zoom/lat/lon and convert to mercantile tile coordinates
-        zoom = int(z)
-        lat = x
-        lon = y
+        # z, x, y are already tile coordinates from the URL path
+        tile_z = z
+        tile_x = x
+        tile_y = y
         
-        # Convert lat/lon/zoom to mercantile tile coordinates
-        tile_coords = tile_ops.latlon_to_tile_coords(lat, lon, zoom)
-        tile_z = tile_coords["z"]
-        tile_x = tile_coords["x"] 
-        tile_y = tile_coords["y"]
+        print(f"Server debug: Generating MVT for {table} at tile coordinates z={tile_z}, x={tile_x}, y={tile_y}")
+        
+        # Add validation
+        if tile_z < 0 or tile_z > 22:
+            raise HTTPException(400, detail=f"Invalid zoom level: {tile_z}. Must be between 0 and 22.")
+        
+        max_coord = 2 ** tile_z - 1
+        if tile_x < 0 or tile_x > max_coord or tile_y < 0 or tile_y > max_coord:
+            raise HTTPException(400, detail=f"Invalid tile coordinates: x={tile_x}, y={tile_y}. Must be between 0 and {max_coord} for zoom {tile_z}.")
 
+        # Check if table exists first
+        print(f"Server debug: Calling get_mvt_tile_from_db with parameters: table={table}, z={tile_z}, x={tile_x}, y={tile_y}")
+        
         tile_data = tile_ops.get_mvt_tile_from_db(table, tile_z, tile_x, tile_y)
+        
         if not tile_data:
-            print(f"Server debug: No MVT data generated for layers.{table} tile {tile_z}/{tile_x}/{tile_y} (from zoom={zoom}, lat={lat}, lon={lon}).")
+            print(f"Server debug: No MVT data generated for layers.{table} tile {tile_z}/{tile_x}/{tile_y}")
             return Response(b'', media_type="application/x-protobuf")
+        
+        print(f"Server debug: Successfully generated MVT tile for {table}, size: {len(tile_data)} bytes")
         return Response(
             content=bytes(tile_data),
             media_type="application/x-protobuf",
@@ -90,7 +100,18 @@ async def get_mvt_tile(
                 "Cache-Control": "public, max-age=3600"
             }
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Catch and log any other exception with full details
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Server error: Detailed traceback for {table} tile {z}/{x}/{y}:")
+        print(error_details)
+        raise HTTPException(500, detail=f"Failed to generate MVT tile for {table}: {str(e)}")
     except RuntimeError as e:
+        print(f"Server error: RuntimeError for {table} tile {z}/{x}/{y}: {str(e)}")
         raise HTTPException(500, detail=f"Failed to generate MVT tile: {str(e)}")
     except Exception as e:
         raise HTTPException(500, detail=f"An unexpected error occurred during tile generation: {str(e)}")

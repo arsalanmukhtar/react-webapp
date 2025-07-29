@@ -81,7 +81,14 @@ def get_mvt_tile_from_db(table: str, z: int, x: int, y: int) -> Optional[bytes]:
                 features_data AS (
                     SELECT
                         ST_AsMVTGeom(
-                            ST_Transform(t1.{geom_column}, 3857),
+                            ST_Transform(
+                                CASE
+                                    WHEN :z <= 7 THEN ST_SimplifyPreserveTopology(t1.{geom_column}, 0.0045)
+                                    WHEN :z BETWEEN 8 AND 12 THEN ST_SimplifyPreserveTopology(t1.{geom_column}, 0.00225)
+                                    ELSE t1.{geom_column}
+                                END,
+                                3857
+                            ),
                             bounds.geom,
                             4096,
                             256,
@@ -93,6 +100,7 @@ def get_mvt_tile_from_db(table: str, z: int, x: int, y: int) -> Optional[bytes]:
                 )
             SELECT ST_AsMVT(features_data.*, 'features') FROM features_data
         """
+        
         result = conn.execute(text(query), {"z": z, "x": x, "y": y}).fetchone()
         return result[0] if result else None
 
