@@ -3,7 +3,6 @@ import Map from 'react-map-gl';
 import { FiPlus, FiMinus } from 'react-icons/fi';
 import { TiLocationArrowOutline } from 'react-icons/ti';
 import { useAuth } from '../../contexts/AuthContext';
-import MapSourceAndLayer from './MapSourceAndLayer';
 
 const MapboxAccessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 if (!MapboxAccessToken) {

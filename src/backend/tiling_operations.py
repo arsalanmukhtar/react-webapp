@@ -7,14 +7,10 @@ from sqlalchemy.engine import Engine
 from .config import settings
 import mercantile
 from typing import Dict, List, Optional, Tuple
-
-
-def get_engine() -> Engine:
-    return create_engine(settings.DATABASE_URL)
+from .database import engine, get_db_connection
 
 def get_geometry_column(table: str) -> Optional[str]:
-    engine = get_engine()
-    with engine.connect() as conn:
+    with get_db_connection() as conn:
         result = conn.execute(
             text("""
                 SELECT f_geometry_column
@@ -26,7 +22,6 @@ def get_geometry_column(table: str) -> Optional[str]:
         return result[0] if result else None
 
 def get_tables() -> List[str]:
-    engine = get_engine()
     with engine.connect() as conn:
         tables = conn.execute(text("""
             SELECT DISTINCT f_table_name
@@ -41,7 +36,6 @@ def get_tile_bounds(z: int, x: int, y: int) -> Tuple[float, float, float, float]
     return bounds.west, bounds.south, bounds.east, bounds.north
 
 def get_geometry_type_from_db(table: str) -> Optional[str]:
-    engine = get_engine()
     geom_column = get_geometry_column(table)
     if not geom_column:
         return None
@@ -64,7 +58,6 @@ def latlon_to_tile_coords(lat: float, lon: float, zoom: int):
 
 
 def get_mvt_tile_from_db(table: str, z: int, x: int, y: int) -> Optional[bytes]:
-    engine = get_engine()
     geom_column = get_geometry_column(table)
     if not geom_column:
         raise ValueError("Geometry column not found.")
@@ -76,27 +69,37 @@ def get_mvt_tile_from_db(table: str, z: int, x: int, y: int) -> Optional[bytes]:
         """), {"table": table, "geom_column": geom_column}).fetchall()
         attributes_list = [row[0] for row in attributes]
         attributes_sql = ', '.join(f'"{attr}"' for attr in attributes_list) if attributes_list else "NULL"
+        # *** SECTION 4: UPDATED MVT TILING QUERY (PYTHON F-STRING) ***
+
         query = f"""
             WITH bounds AS (SELECT ST_TileEnvelope(:z, :x, :y) AS geom),
                 features_data AS (
                     SELECT
                         ST_AsMVTGeom(
-                            ST_Transform(
-                                CASE
-                                    WHEN :z <= 7 THEN ST_SimplifyPreserveTopology(t1.{geom_column}, 0.0045)
-                                    WHEN :z BETWEEN 8 AND 12 THEN ST_SimplifyPreserveTopology(t1.{geom_column}, 0.00225)
-                                    ELSE t1.{geom_column}
-                                END,
-                                3857
-                            ),
+                            -- Select the appropriate pre-simplified geometry based on zoom level
+                            CASE
+                                WHEN :z <= 3 THEN tbl.geom_z_0_3
+                                WHEN :z BETWEEN 4 AND 6 THEN tbl.geom_z_3_6
+                                WHEN :z BETWEEN 7 AND 9 THEN tbl.geom_z_6_10
+                                ELSE ST_Transform(tbl.geom, 3857) -- Use original (high-res) geometry for zoom 10 and above
+                            END,
                             bounds.geom,
                             4096,
                             256,
                             true
                         ) AS geom,
                         {attributes_sql}
-                    FROM layers.{table} t1, bounds
-                    WHERE ST_Intersects(ST_Transform(t1.{geom_column}, 3857), bounds.geom)
+                    FROM layers.{table} tbl, bounds
+                    WHERE ST_Intersects(
+                            -- Ensure the WHERE clause also uses the appropriate pre-simplified geometry
+                            CASE
+                                WHEN :z <= 3 THEN tbl.geom_z_0_3
+                                WHEN :z BETWEEN 4 AND 6 THEN tbl.geom_z_3_6
+                                WHEN :z BETWEEN 7 AND 9 THEN tbl.geom_z_6_10
+                                ELSE ST_Transform(tbl.geom, 3857) -- Use original (high-res) geometry for zoom 10 and above
+                            END,
+                            bounds.geom
+                        )
                 )
             SELECT ST_AsMVT(features_data.*, 'features') FROM features_data
         """
@@ -105,7 +108,6 @@ def get_mvt_tile_from_db(table: str, z: int, x: int, y: int) -> Optional[bytes]:
         return result[0] if result else None
 
 def get_table_extent_from_db(table: str) -> Optional[Dict[str, float]]:
-    engine = get_engine()
     geom_column = get_geometry_column(table)
     if not geom_column:
         return None
@@ -128,7 +130,6 @@ def get_table_extent_from_db(table: str) -> Optional[Dict[str, float]]:
         }
 
 def check_srid_from_db(table: str) -> Dict[str, any]:
-    engine = get_engine()
     geom_column = get_geometry_column(table)
     if not geom_column:
         return {"valid": False, "error": "No geometry column found."}
@@ -149,7 +150,6 @@ def check_srid_from_db(table: str) -> Dict[str, any]:
         return {"valid": True, "srid": srid}
 
 def get_table_fields_from_db(table: str) -> List[Dict[str, str]]:
-    engine = get_engine()
     geom_column = get_geometry_column(table)
     with engine.connect() as conn:
         result = conn.execute(text("""

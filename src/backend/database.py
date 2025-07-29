@@ -7,7 +7,7 @@ from .config import settings  # Changed to relative import
 # The `echo=True` argument logs all SQL statements to the console, useful for debugging.
 
 # engine = create_engine(settings.DATABASE_URL, echo=False)
-engine = create_engine(settings.DATABASE_URL, echo=False)
+engine = create_engine(settings.DOCKER_DATABASE_URL, echo=False)
 
 # Create a SessionLocal class
 # This class will be used to create database sessions.
@@ -36,6 +36,14 @@ def get_db():
 
 # This function is for creating all defined tables in the database.
 # It's useful for initial setup but for production, consider using Alembic for migrations.
+def get_db_connection():
+    """
+    Get a raw database connection for executing SQL queries.
+    Use this for raw SQL operations like in tiling_operations.
+    """
+    return engine.connect()
+
+
 def create_db_tables():
     """
     Creates all tables defined in the Base metadata.

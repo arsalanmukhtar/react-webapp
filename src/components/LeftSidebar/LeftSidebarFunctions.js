@@ -47,7 +47,7 @@ export const addLayerToMap = (token, setActiveMapLayers, setActiveLayer, setNoti
             case 'fill':
                 return {
                     'fill-color': color,
-                    'fill-opacity': 0.6
+                    'fill-opacity': 0.3
                 };
             default:
                 return {
