@@ -12,6 +12,26 @@ import mercantile
 from typing import Dict, List, Optional, Tuple
 from .database import engine, get_db_connection
 
+"""
+MVT Tiling Operations with Optimized Point Clustering
+
+This module provides MVT (Mapbox Vector Tile) generation with intelligent handling of different geometry types:
+
+1. **Polygon/LineString Data**: Uses pre-simplified geometries at different zoom levels for performance
+   - Zoom 0-3: Heavily simplified (geom_z_0_3)
+   - Zoom 4-6: Medium simplified (geom_z_3_6) 
+   - Zoom 7-9: Lightly simplified (geom_z_6_10)
+   - Zoom 10+: Original geometry
+
+2. **Point Data**: Uses intelligent clustering to reduce visual clutter and improve performance
+   - Zoom 0-6: Heavy clustering (64px grid, ~100m tolerance)
+   - Zoom 7-12: Medium clustering (32px grid, ~50m tolerance)
+   - Zoom 13+: Individual points (no clustering)
+
+Point clustering uses ST_SnapToGrid to group nearby points and ST_Centroid to create cluster representatives.
+Each cluster includes a 'point_count' attribute showing how many original points it represents.
+"""
+
 # --- LOCAL FILE SYSTEM CACHE CONFIGURATION ---
 CACHE_DIR = "local_tile_cache"
 CACHE_LIMIT_GB = 10
@@ -150,15 +170,118 @@ def latlon_to_tile_coords(lat: float, lon: float, zoom: int):
     tile = mercantile.tile(lon, lat, zoom)
     return {"z": tile.z, "x": tile.x, "y": tile.y}
 
+def _build_point_clustering_query(table: str, geom_column: str, attributes_list: List[str], z: int) -> str:
+    """
+    Build a PostGIS query for point clustering based on zoom level.
+    
+    Clustering strategy:
+    - Zoom 0-6: Heavy clustering (large grid)
+    - Zoom 7-12: Medium clustering (smaller grid) 
+    - Zoom 13+: Individual points (no clustering)
+    """
+    
+    # Define clustering grid size based on zoom level (in pixels)
+    if z <= 6:
+        # Heavy clustering for low zoom levels
+        cluster_grid_size = 64  # 64x64 pixel grid
+        cluster_tolerance = 0.001  # ~100m tolerance for clustering
+    elif z <= 12:
+        # Medium clustering for medium zoom levels
+        cluster_grid_size = 32  # 32x32 pixel grid
+        cluster_tolerance = 0.0005  # ~50m tolerance for clustering
+    else:
+        # No clustering for high zoom levels - show individual points
+        cluster_grid_size = None
+        cluster_tolerance = None
+    
+    # Build attributes SQL - for clustering, we'll aggregate some attributes
+    if attributes_list:
+        # For clustered points, we'll take the first value of each attribute
+        # and add a count field
+        if cluster_grid_size is not None:
+            attributes_sql = ', '.join([
+                f'(array_agg("{attr}" ORDER BY "{attr}"))[1] AS "{attr}"' 
+                for attr in attributes_list if attr not in ['id', 'gid', 'fid']  # Skip ID fields
+            ])
+            if attributes_sql:
+                attributes_sql += ', COUNT(*) AS point_count'
+            else:
+                attributes_sql = 'COUNT(*) AS point_count'
+        else:
+            # Individual points - use all attributes
+            attributes_sql = ', '.join(f'"{attr}"' for attr in attributes_list)
+    else:
+        attributes_sql = 'COUNT(*) AS point_count' if cluster_grid_size is not None else 'NULL'
+    
+    if cluster_grid_size is not None:
+        # Clustering query using ST_SnapToGrid for spatial clustering
+        query = f"""
+            WITH bounds AS (SELECT ST_TileEnvelope(:z, :x, :y) AS geom),
+                clustered_points AS (
+                    SELECT
+                        ST_Centroid(
+                            ST_Collect(ST_Transform(tbl.{geom_column}, 3857))
+                        ) AS cluster_geom,
+                        {attributes_sql}
+                    FROM layers.{table} tbl, bounds
+                    WHERE ST_Intersects(ST_Transform(tbl.{geom_column}, 3857), bounds.geom)
+                      AND tbl.{geom_column} IS NOT NULL
+                    GROUP BY ST_SnapToGrid(ST_Transform(tbl.{geom_column}, 3857), {cluster_tolerance})
+                    HAVING COUNT(*) > 0
+                ),
+                features_data AS (
+                    SELECT
+                        ST_AsMVTGeom(
+                            cp.cluster_geom,
+                            bounds.geom,
+                            4096,
+                            {cluster_grid_size},
+                            true
+                        ) AS geom,
+                        cp.*
+                    FROM clustered_points cp
+                    CROSS JOIN bounds
+                    WHERE cp.cluster_geom IS NOT NULL
+                      AND ST_Intersects(cp.cluster_geom, bounds.geom)
+                )
+            SELECT ST_AsMVT(features_data.*, 'features') FROM features_data
+        """
+    else:
+        # Individual points query (no clustering)
+        query = f"""
+            WITH bounds AS (SELECT ST_TileEnvelope(:z, :x, :y) AS geom),
+                features_data AS (
+                    SELECT
+                        ST_AsMVTGeom(
+                            ST_Transform(tbl.{geom_column}, 3857),
+                            bounds.geom,
+                            4096,
+                            256,
+                            true
+                        ) AS geom,
+                        {attributes_sql}
+                    FROM layers.{table} tbl, bounds
+                    WHERE ST_Intersects(ST_Transform(tbl.{geom_column}, 3857), bounds.geom)
+                      AND tbl.{geom_column} IS NOT NULL
+                )
+            SELECT ST_AsMVT(features_data.*, 'features') FROM features_data
+        """
+    
+    return query
+
 # --- ACTUAL DB FETCH FUNCTION (RENAMED TO BE PRIVATE) ---
 def _get_mvt_tile_from_db_actual(table: str, z: int, x: int, y: int) -> Optional[bytes]:
     """
     Internal function to fetch and generate an MVT tile directly from the database.
-    This is the original logic from your get_mvt_tile_from_db.
+    Handles both polygon/line geometries (with simplification) and point geometries (with clustering).
     """
     geom_column = get_geometry_column(table)
     if not geom_column:
         raise ValueError("Geometry column not found.")
+    
+    # Check if this is point data
+    geom_type = get_geometry_type_from_db(table)
+    is_point_data = geom_type and 'POINT' in geom_type.upper()
     
     with engine.connect() as conn:
         attributes = conn.execute(text("""
@@ -167,40 +290,45 @@ def _get_mvt_tile_from_db_actual(table: str, z: int, x: int, y: int) -> Optional
             WHERE table_schema = 'layers' AND table_name = :table AND column_name != :geom_column
         """), {"table": table, "geom_column": geom_column}).fetchall()
         attributes_list = [row[0] for row in attributes]
-        attributes_sql = ', '.join(f'"{attr}"' for attr in attributes_list) if attributes_list else "NULL"
         
-        query = f"""
-            WITH bounds AS (SELECT ST_TileEnvelope(:z, :x, :y) AS geom),
-                features_data AS (
-                    SELECT
-                        ST_AsMVTGeom(
-                            -- Select the appropriate pre-simplified geometry based on zoom level
-                            CASE
-                                WHEN :z <= 3 THEN tbl.geom_z_0_3
-                                WHEN :z BETWEEN 4 AND 6 THEN tbl.geom_z_3_6
-                                WHEN :z BETWEEN 7 AND 9 THEN tbl.geom_z_6_10
-                                ELSE ST_Transform(tbl.geom, 3857) -- Use original (high-res) geometry for zoom 10 and above
-                            END,
-                            bounds.geom,
-                            4096,
-                            256,
-                            true
-                        ) AS geom,
-                        {attributes_sql}
-                    FROM layers.{table} tbl, bounds
-                    WHERE ST_Intersects(
-                            -- Ensure the WHERE clause also uses the appropriate pre-simplified geometry
-                            CASE
-                                WHEN :z <= 3 THEN tbl.geom_z_0_3
-                                WHEN :z BETWEEN 4 AND 6 THEN tbl.geom_z_3_6
-                                WHEN :z BETWEEN 7 AND 9 THEN tbl.geom_z_6_10
-                                ELSE ST_Transform(tbl.geom, 3857) -- Use original (high-res) geometry for zoom 10 and above
-                            END,
-                            bounds.geom
-                        )
-                )
-            SELECT ST_AsMVT(features_data.*, 'features') FROM features_data
-        """
+        if is_point_data:
+            # Point clustering query
+            query = _build_point_clustering_query(table, geom_column, attributes_list, z)
+        else:
+            # Polygon/Line simplification query
+            attributes_sql = ', '.join(f'"{attr}"' for attr in attributes_list) if attributes_list else "NULL"
+            query = f"""
+                WITH bounds AS (SELECT ST_TileEnvelope(:z, :x, :y) AS geom),
+                    features_data AS (
+                        SELECT
+                            ST_AsMVTGeom(
+                                -- Select the appropriate pre-simplified geometry based on zoom level
+                                CASE
+                                    WHEN :z <= 3 THEN tbl.geom_z_0_3
+                                    WHEN :z BETWEEN 4 AND 6 THEN tbl.geom_z_3_6
+                                    WHEN :z BETWEEN 7 AND 9 THEN tbl.geom_z_6_10
+                                    ELSE ST_Transform(tbl.geom, 3857) -- Use original (high-res) geometry for zoom 10 and above
+                                END,
+                                bounds.geom,
+                                4096,
+                                256,
+                                true
+                            ) AS geom,
+                            {attributes_sql}
+                        FROM layers.{table} tbl, bounds
+                        WHERE ST_Intersects(
+                                -- Ensure the WHERE clause also uses the appropriate pre-simplified geometry
+                                CASE
+                                    WHEN :z <= 3 THEN tbl.geom_z_0_3
+                                    WHEN :z BETWEEN 4 AND 6 THEN tbl.geom_z_3_6
+                                    WHEN :z BETWEEN 7 AND 9 THEN tbl.geom_z_6_10
+                                    ELSE ST_Transform(tbl.geom, 3857) -- Use original (high-res) geometry for zoom 10 and above
+                                END,
+                                bounds.geom
+                            )
+                    )
+                SELECT ST_AsMVT(features_data.*, 'features') FROM features_data
+            """
         
         result = conn.execute(text(query), {"z": z, "x": x, "y": y}).fetchone()
         return result[0] if result else None

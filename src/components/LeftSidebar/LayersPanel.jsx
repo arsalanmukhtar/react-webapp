@@ -40,9 +40,9 @@ const LayersPanel = ({
           <div className="space-y-1 text-xs">
             <p className="font-medium text-green-500">{selectedLayerForInfo.name}</p>
             <ul className="space-y-1">
-              <li className="flex items-center">
+              {/* <li className="flex items-center">
                 <FiInfo className="mr-2 text-gray-500" size={12} /> Source: {selectedLayerForInfo.type === 'catalog' ? 'Catalog Layer' : 'GeoJSON Upload'}
-              </li>
+              </li> */}
               <li className="flex items-center">
                 <FiMapPin className="mr-2 text-gray-500" size={12} /> Geometry: {selectedLayerForInfo.geometry_type || 'N/A'}
               </li>

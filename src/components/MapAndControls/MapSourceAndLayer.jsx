@@ -6,6 +6,13 @@ const MapSourceAndLayer = ({ mapRef, activeMapLayers }) => {
   const isMapLoadedRef = useRef(false);
   const trackedLayersRef = useRef(new Map()); // Track layers by original_name
 
+  console.log('🔍 MapSourceAndLayer: Received props:', {
+    hasMapRef: !!mapRef?.current,
+    hasUser: !!user,
+    activeMapLayersCount: activeMapLayers?.length || 0,
+    activeMapLayers: activeMapLayers
+  });
+
   // Mount once when user logs in - setup map load listener
   useEffect(() => {
     if (!mapRef.current || !user) return;
@@ -35,7 +42,17 @@ const MapSourceAndLayer = ({ mapRef, activeMapLayers }) => {
 
   // Handle layer changes when LayersPanel items change
   useEffect(() => {
-    if (!mapRef.current || !isMapLoadedRef.current || !user) return;
+    console.log('🔄 MapSourceAndLayer useEffect triggered:', {
+      hasMapRef: !!mapRef.current,
+      isMapLoaded: isMapLoadedRef.current,
+      hasUser: !!user,
+      activeMapLayersLength: activeMapLayers?.length || 0
+    });
+
+    if (!mapRef.current || !isMapLoadedRef.current || !user) {
+      console.log('⚠️ MapSourceAndLayer: Early return - missing requirements');
+      return;
+    }
 
     const map = mapRef.current.getMap(); // Get the underlying Mapbox GL JS map instance
     const currentTrackedLayers = trackedLayersRef.current;
@@ -59,10 +76,17 @@ const MapSourceAndLayer = ({ mapRef, activeMapLayers }) => {
 
     // Log initial load vs new additions
     if (isInitialLoad && layersToAdd.length > 0) {
-      console.log(`🚀 Login detected - Loading ${layersToAdd.length} existing layers from database:`);
+      console.log(`🚀 Login detected - Loading ${layersToAdd.length} existing layers from database:`, layersToAdd);
     } else if (layersToAdd.length > 0) {
-      console.log(`📦 New layers being added from catalog: ${layersToAdd.length}`);
+      console.log(`📦 New layers being added from catalog: ${layersToAdd.length}`, layersToAdd);
     }
+
+    console.log('🎯 MapSourceAndLayer processing:', {
+      totalActiveLayers: activeMapLayers.length,
+      layersToAdd: layersToAdd.length,
+      layersToRemove: 0, // Will update below
+      trackedLayersCount: currentTrackedLayers.size
+    });
 
     // Find layers to remove (in trackedLayers but not in activeMapLayers or not visible)
     const layersToRemove = [];
