@@ -19,7 +19,6 @@ const useUserLayers = (user, token) => {
         });
         if (res.ok) {
           const layers = await res.json();
-          console.log('📊 Loaded user layers:', layers);
           const processedLayers = layers.map(l => ({ ...l, isVisible: l.is_visible }));
           setActiveMapLayers(processedLayers);
         } else {

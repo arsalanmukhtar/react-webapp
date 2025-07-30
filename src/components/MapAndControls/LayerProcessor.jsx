@@ -35,25 +35,25 @@ const LayerProcessor = ({ mapRef }) => {
     switch (mapboxType) {
       case 'circle':
         paint = {
-          'circle-radius': 6,
+          'circle-radius': 2,
           'circle-color': color
         };
         break;
       case 'line':
         paint = {
           'line-color': color,
-          'line-width': 2
+          'line-width': 0.75
         };
         break;
       case 'fill':
         paint = {
           'fill-color': color,
-          'fill-opacity': 0.6
+          'fill-opacity': 0.3
         };
         break;
       default:
         paint = {
-          'circle-radius': 6,
+          'circle-radius': 2,
           'circle-color': color
         };
     }

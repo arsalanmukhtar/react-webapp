@@ -36,13 +36,13 @@ export const addLayerToMap = (token, setActiveMapLayers, setActiveLayer, setNoti
         switch (layerType) {
             case 'circle':
                 return {
-                    'circle-radius': 6,
+                    'circle-radius': 2,
                     'circle-color': color
                 };
             case 'line':
                 return {
                     'line-color': color,
-                    'line-width': 2
+                    'line-width': 0.75
                 };
             case 'fill':
                 return {
@@ -51,7 +51,7 @@ export const addLayerToMap = (token, setActiveMapLayers, setActiveLayer, setNoti
                 };
             default:
                 return {
-                    'circle-radius': 6,
+                    'circle-radius': 2,
                     'circle-color': color
                 };
         }
