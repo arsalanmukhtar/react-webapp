@@ -128,6 +128,7 @@ export const addLayerToMap = (token, setActiveMapLayers, setActiveLayer, setNoti
         
         if (res.ok) {
             const newLayer = await res.json();
+            
             setActiveMapLayers(prevLayers => [...prevLayers, { ...newLayer, isVisible: newLayer.is_visible }]);
             setActiveLayer('layers'); // Switch to layers panel to show the newly added layer
             setNotification?.({
@@ -159,7 +160,7 @@ export const toggleLayerVisibility = (activeMapLayers, token, setActiveMapLayers
     const layer = activeMapLayers.find(l => l.name === layerName);
     if (!layer || !token) return;
     
-    console.log(`👆 LayerItem interaction: Toggling visibility for ${layer.original_name || layer.name}`);
+    // console.log(`👆 LayerItem interaction: Toggling visibility for ${layer.original_name || layer.name}`);
     
     try {
         const res = await fetch(`/api/data/users/me/map_layers/${layer.id}`, {
@@ -172,7 +173,6 @@ export const toggleLayerVisibility = (activeMapLayers, token, setActiveMapLayers
         });
         if (res.ok) {
             setActiveMapLayers(prevLayers => prevLayers.map(l => l.id === layer.id ? { ...l, isVisible: !l.isVisible } : l));
-            console.log(`👁️ Layer visibility updated: ${layer.original_name || layer.name} -> ${!layer.isVisible ? 'visible' : 'hidden'}`);
         }
     } catch (err) {
         console.error('Failed to toggle layer visibility:', err);
@@ -180,46 +180,21 @@ export const toggleLayerVisibility = (activeMapLayers, token, setActiveMapLayers
 };
 
 export const handleSelectLayerForInfo = (selectedLayerForInfo, setSelectedLayerForInfo, setSelectedLayerId) => (layer) => {
-    console.log(`👆 LayerItem interaction: Selecting layer for info - ${layer.original_name || layer.name}`);
+    // console.log(`👆 LayerItem interaction: Selecting layer for info - ${layer.original_name || layer.name}`);
     
     if (selectedLayerForInfo && selectedLayerForInfo.id === layer.id) {
         setSelectedLayerForInfo(null);
         setSelectedLayerId(null);
-        console.log(`ℹ️ Layer info deselected: ${layer.original_name || layer.name}`);
+        // console.log(`ℹ️ Layer info deselected: ${layer.original_name || layer.name}`);
     } else {
         setSelectedLayerForInfo(layer);
         setSelectedLayerId(layer.id);
-        console.log(`ℹ️ Layer info selected: ${layer.original_name || layer.name}`);
+        // console.log(`ℹ️ Layer info selected: ${layer.original_name || layer.name}`);
     }
 };
 
 export const handleDeleteLayer = (token, setActiveMapLayers, selectedLayerForInfo, setSelectedLayerForInfo) => async (layerId) => {
     if (!token) return;
-    
-    // First, get the current activeMapLayers to find the layer being deleted
-    let layerToDelete = null;
-    setActiveMapLayers(prevLayers => {
-        layerToDelete = prevLayers.find(l => l.id === layerId);
-        return prevLayers; // Don't modify yet, just find the layer
-    });
-    
-    // Wait a moment to ensure we have the layer data
-    await new Promise(resolve => setTimeout(resolve, 10));
-    
-    // Create a complete snapshot of the layer information
-    const layerSnapshot = {
-        id: layerToDelete?.id,
-        name: layerToDelete?.name,
-        original_name: layerToDelete?.original_name,
-        mapbox_type: layerToDelete?.mapbox_type,
-        complete_data: layerToDelete
-    };
-    
-    const displayName = layerSnapshot.original_name || layerSnapshot.name;
-    
-    console.log(`👆 LayerItem interaction: Deleting layer - ${displayName} (ID: ${layerSnapshot.id})`);
-    console.log(`🗑️ Layer snapshot before deletion:`, layerSnapshot);
-    console.log(`🗑️ About to remove: ${displayName}-layer and ${displayName}-source`);
     
     try {
         const res = await fetch(`/api/data/users/me/map_layers/${layerId}`, {
@@ -231,7 +206,6 @@ export const handleDeleteLayer = (token, setActiveMapLayers, selectedLayerForInf
             if (selectedLayerForInfo && selectedLayerForInfo.id === layerId) {
                 setSelectedLayerForInfo(null);
             }
-            console.log(`🗑️ Layer deleted from database: ${displayName}-layer and ${displayName}-source (ID: ${layerSnapshot.id}, Name: ${layerSnapshot.name})`);
         }
     } catch (err) {
         console.error('Failed to delete layer:', err);

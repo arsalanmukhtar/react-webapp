@@ -3,7 +3,7 @@ import Map from 'react-map-gl';
 import { FiPlus, FiMinus } from 'react-icons/fi';
 import { TiLocationArrowOutline } from 'react-icons/ti';
 import { useAuth } from '../../contexts/AuthContext';
-import MapSourceAndLayer from './MapSourceAndLayer';
+import MapLayerLogger from './MapLayerLogger';
 
 const MapboxAccessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 if (!MapboxAccessToken) {
@@ -19,26 +19,82 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
     const defaultMapZoom = 14;
     const defaultMapTheme = "mapbox://styles/mapbox/streets-v12";
 
-    const [viewState, setViewState] = useState({
-        longitude: user?.map_center_lon || defaultMapCenterLon,
-        latitude: user?.map_center_lat || defaultMapCenterLat,
-        zoom: user?.map_zoom || defaultMapZoom,
-        bearing: 0,
-        pitch: 0,
-    });
+    // Get initial position from localStorage or user settings
+    const getInitialViewState = () => {
+        const savedViewState = localStorage.getItem('mapViewState');
+        if (savedViewState) {
+            try {
+                const parsed = JSON.parse(savedViewState);
+                return {
+                    longitude: parsed.longitude || user?.map_center_lon || defaultMapCenterLon,
+                    latitude: parsed.latitude || user?.map_center_lat || defaultMapCenterLat,
+                    zoom: parsed.zoom || user?.map_zoom || defaultMapZoom,
+                    bearing: parsed.bearing || 0,
+                    pitch: parsed.pitch || 0,
+                };
+            } catch (e) {
+                console.warn('Failed to parse saved map state:', e);
+            }
+        }
+        
+        return {
+            longitude: user?.map_center_lon || defaultMapCenterLon,
+            latitude: user?.map_center_lat || defaultMapCenterLat,
+            zoom: user?.map_zoom || defaultMapZoom,
+            bearing: 0,
+            pitch: 0,
+        };
+    };
+
+    const [viewState, setViewState] = useState(getInitialViewState);
     const [mapStyle, setMapStyle] = useState(user?.map_theme || defaultMapTheme);
 
     useEffect(() => {
         if (user) {
-            setViewState(prev => ({
-                ...prev,
+            // Get saved position from localStorage or use user defaults
+            const savedViewState = localStorage.getItem('mapViewState');
+            let newViewState = {
                 longitude: user.map_center_lon || defaultMapCenterLon,
                 latitude: user.map_center_lat || defaultMapCenterLat,
                 zoom: user.map_zoom || defaultMapZoom,
-            }));
+                bearing: 0,
+                pitch: 0,
+            };
+
+            if (savedViewState) {
+                try {
+                    const parsed = JSON.parse(savedViewState);
+                    newViewState = {
+                        longitude: parsed.longitude || newViewState.longitude,
+                        latitude: parsed.latitude || newViewState.latitude,
+                        zoom: parsed.zoom || newViewState.zoom,
+                        bearing: parsed.bearing || 0,
+                        pitch: parsed.pitch || 0,
+                    };
+                } catch (e) {
+                    console.warn('Failed to parse saved map state on login:', e);
+                }
+            }
+
+            setViewState(newViewState);
             setMapStyle(user.map_theme || defaultMapTheme);
         }
     }, [user]);
+
+    // Save map position to localStorage when it changes
+    const handleViewStateChange = (evt) => {
+        const newViewState = evt.viewState;
+        setViewState(newViewState);
+        
+        // Save to localStorage for persistence across refreshes
+        localStorage.setItem('mapViewState', JSON.stringify({
+            longitude: newViewState.longitude,
+            latitude: newViewState.latitude,
+            zoom: newViewState.zoom,
+            bearing: newViewState.bearing,
+            pitch: newViewState.pitch
+        }));
+    };
 
     const handleZoomIn = () => {
         if (mapRef.current) {
@@ -60,11 +116,14 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
 
     return (
         <>
+            {/* Map Layer Logger Component - logs all layer database operations */}
+            <MapLayerLogger activeMapLayers={activeMapLayers} user={user} />
+            
             <div className="map-background-container">
                 <Map
                     ref={mapRef}
                     {...viewState}
-                    onMove={evt => setViewState(evt.viewState)}
+                    onMove={handleViewStateChange}
                     mapStyle={mapStyle}
                     mapboxAccessToken={MapboxAccessToken}
                     attributionControl={false}
@@ -75,12 +134,7 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
                 />
             </div>
 
-            {/* Use MapSourceAndLayer component to handle layer management */}
-            {console.log('🗺️ MapAndControls: Rendering with activeMapLayers:', activeMapLayers)}
-            <MapSourceAndLayer 
-                mapRef={mapRef} 
-                activeMapLayers={activeMapLayers} 
-            />
+            {/* Layer management removed - keeping only map position persistence */}
 
             {isMapDashboardActive && (
                 <div className="custom-map-controls fixed bottom-8 right-10 z-20">

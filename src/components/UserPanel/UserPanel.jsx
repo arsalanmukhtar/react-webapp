@@ -13,7 +13,7 @@ const UserPanel = () => {
         logout();
         setIsDropdownOpen(false);
         navigate('/');
-        console.log('Logout button clicked. Token cleared. Navigating to homepage.');
+        // console.log('Logout button clicked. Token cleared. Navigating to homepage.');
     };
 
     const toggleDropdown = () => {

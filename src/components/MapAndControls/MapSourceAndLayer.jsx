@@ -1,120 +1,197 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const MapSourceAndLayer = ({ mapRef, activeMapLayers }) => {
   const { user } = useAuth();
-  const isMapLoadedRef = useRef(false);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
   const trackedLayersRef = useRef(new Map()); // Track layers by original_name
+  const prevActiveLayersRef = useRef(null); // Track previous active layers for comparison
 
   console.log('🔍 MapSourceAndLayer: Received props:', {
     hasMapRef: !!mapRef?.current,
     hasUser: !!user,
+    isMapLoaded: isMapLoaded,
     activeMapLayersCount: activeMapLayers?.length || 0,
-    activeMapLayers: activeMapLayers
+    activeMapLayers: activeMapLayers,
+    activeMapLayersStringified: JSON.stringify(activeMapLayers)
   });
 
-  // Mount once when user logs in - setup map load listener
+  // Effect 1: Setup map load detection and handle user logout
   useEffect(() => {
-    if (!mapRef.current || !user) return;
-
-    const map = mapRef.current.getMap(); // Get the underlying Mapbox GL JS map instance
-
-    const handleMapLoad = () => {
-      isMapLoadedRef.current = true;
-    };
-
-    // Check if map is already loaded
-    if (map.isStyleLoaded()) {
-      handleMapLoad();
-    } else {
-      map.on('load', handleMapLoad);
-    }
-
-    // Cleanup on unmount (user logout)
-    return () => {
-      if (map && !map._removed) {
-        map.off('load', handleMapLoad);
-      }
-      isMapLoadedRef.current = false;
-      trackedLayersRef.current.clear();
-    };
-  }, [mapRef, user]);
-
-  // Handle layer changes when LayersPanel items change
-  useEffect(() => {
-    console.log('🔄 MapSourceAndLayer useEffect triggered:', {
+    console.log('🔧 Map setup effect triggered', {
       hasMapRef: !!mapRef.current,
-      isMapLoaded: isMapLoadedRef.current,
       hasUser: !!user,
-      activeMapLayersLength: activeMapLayers?.length || 0
+      isMapLoaded: isMapLoaded
     });
 
-    if (!mapRef.current || !isMapLoadedRef.current || !user) {
-      console.log('⚠️ MapSourceAndLayer: Early return - missing requirements');
+    if (!mapRef.current) {
+      console.log('⚠️ MapSourceAndLayer: No mapRef, exiting');
       return;
     }
 
-    const map = mapRef.current.getMap(); // Get the underlying Mapbox GL JS map instance
+    // Handle user logout - clear everything
+    if (!user) {
+      console.log('🚪 User logged out, cleaning up layers');
+      setIsMapLoaded(false);
+      trackedLayersRef.current.clear();
+      return;
+    }
+
+    const map = mapRef.current.getMap();
+
+    const handleMapReady = () => {
+      console.log('🗺️ Map is ready for layers');
+      setIsMapLoaded(true);
+    };
+
+    // Check if map is ready
+    if (map.isStyleLoaded() && map.loaded()) {
+      handleMapReady();
+    } else {
+      // Listen for map to be ready
+      const onLoad = () => {
+        if (map.isStyleLoaded() && map.loaded()) {
+          handleMapReady();
+        }
+      };
+      
+      map.on('load', onLoad);
+      map.on('styledata', onLoad);
+
+      // Cleanup
+      return () => {
+        if (map && !map._removed) {
+          map.off('load', onLoad);
+          map.off('styledata', onLoad);
+        }
+      };
+    }
+  }, [mapRef, user]);
+
+  // Effect 2: Process layers when map becomes ready (initial load)
+  useEffect(() => {
+    console.log('🎯 Initial layer processing effect triggered', {
+      hasMapRef: !!mapRef.current,
+      hasUser: !!user,
+      isMapLoaded: isMapLoaded,
+      activeMapLayersCount: activeMapLayers?.length || 0
+    });
+
+    if (!mapRef.current || !user || !isMapLoaded) {
+      console.log('⚠️ MapSourceAndLayer: Not ready for layer processing', {
+        hasMapRef: !!mapRef.current,
+        hasUser: !!user,
+        isMapLoaded
+      });
+      return;
+    }
+
+    // Process layers when map becomes ready
+    console.log('🎯 Map just became ready, processing layers');
+    processLayers();
+
+  }, [isMapLoaded]);
+
+  // Effect 3: Handle immediate layer changes when map is already loaded
+  useEffect(() => {
+    console.log('🚀 Immediate layer change effect triggered', {
+      hasMapRef: !!mapRef.current,
+      hasUser: !!user,
+      isMapLoaded: isMapLoaded,
+      activeMapLayersCount: activeMapLayers?.length || 0,
+      activeMapLayersIds: activeMapLayers?.map(l => l.original_name || l.name) || []
+    });
+
+    if (!mapRef.current || !user || !isMapLoaded) {
+      return;
+    }
+
+    // Check if layers actually changed
+    const currentLayersString = JSON.stringify(activeMapLayers?.map(l => ({ 
+      name: l.original_name || l.name, 
+      visible: l.is_visible !== false && l.isVisible !== false 
+    })) || []);
+    
+    if (prevActiveLayersRef.current === currentLayersString) {
+      console.log('📍 Layers unchanged, skipping processing');
+      return;
+    }
+
+    console.log('📍 Layers changed, processing immediately');
+    prevActiveLayersRef.current = currentLayersString;
+
+    // Process layers immediately if map is already loaded
+    processLayers();
+
+  }, [activeMapLayers, isMapLoaded, user]);
+
+  const processLayers = () => {
+    if (!mapRef.current || !user || !isMapLoaded) {
+      console.log('⚠️ processLayers: Prerequisites not met');
+      return;
+    }
+
+    const map = mapRef.current.getMap();
     const currentTrackedLayers = trackedLayersRef.current;
+    const activeLayers = activeMapLayers || [];
 
-    // Check if this is initial load (no layers tracked yet but activeMapLayers exist)
-    const isInitialLoad = currentTrackedLayers.size === 0 && activeMapLayers.length > 0;
+    console.log('🎯 Processing layers:', {
+      activeLayersCount: activeLayers.length,
+      trackedLayersCount: currentTrackedLayers.size,
+      activeLayers: activeLayers
+    });
 
-    // Create a set of currently active layer original_names
+    // Create set of currently active visible layer names
     const activeLayerNames = new Set(
-      activeMapLayers
+      activeLayers
         .filter(layer => layer.is_visible !== false && layer.isVisible !== false)
         .map(layer => layer.original_name || layer.name)
     );
 
-    // Find layers to add (in activeMapLayers but not in trackedLayers)
-    const layersToAdd = activeMapLayers.filter(layer => {
+    // Find layers to add
+    const layersToAdd = activeLayers.filter(layer => {
       const originalName = layer.original_name || layer.name;
-      return (layer.is_visible !== false && layer.isVisible !== false) && 
-             !currentTrackedLayers.has(originalName);
+      const shouldBeVisible = layer.is_visible !== false && layer.isVisible !== false;
+      const isNotTracked = !currentTrackedLayers.has(originalName);
+      return shouldBeVisible && isNotTracked;
     });
 
-    // Log initial load vs new additions
-    if (isInitialLoad && layersToAdd.length > 0) {
-      console.log(`🚀 Login detected - Loading ${layersToAdd.length} existing layers from database:`, layersToAdd);
-    } else if (layersToAdd.length > 0) {
-      console.log(`📦 New layers being added from catalog: ${layersToAdd.length}`, layersToAdd);
-    }
-
-    console.log('🎯 MapSourceAndLayer processing:', {
-      totalActiveLayers: activeMapLayers.length,
-      layersToAdd: layersToAdd.length,
-      layersToRemove: 0, // Will update below
-      trackedLayersCount: currentTrackedLayers.size
-    });
-
-    // Find layers to remove (in trackedLayers but not in activeMapLayers or not visible)
+    // Find layers to remove
     const layersToRemove = [];
     currentTrackedLayers.forEach((trackedLayer, originalName) => {
       if (!activeLayerNames.has(originalName)) {
-        layersToRemove.push({ originalName, ...trackedLayer });
+        layersToRemove.push(originalName);
       }
+    });
+
+    console.log('📊 Layer operations:', {
+      toAdd: layersToAdd.length,
+      toRemove: layersToRemove.length,
+      currentMapLayers: map.getStyle().layers?.map(l => l.id) || [],
+      currentMapSources: Object.keys(map.getStyle().sources || {})
     });
 
     // Add new layers
     layersToAdd.forEach(layer => {
+      const originalName = layer.original_name || layer.name;
+      console.log(`➕ Adding layer: ${originalName}`);
       addLayerToMap(map, layer, currentTrackedLayers);
     });
 
     // Remove old layers
-    layersToRemove.forEach(layer => {
-      removeLayerFromMap(map, layer.originalName, currentTrackedLayers);
+    layersToRemove.forEach(originalName => {
+      console.log(`🗑️ Removing layer: ${originalName}`);
+      removeLayerFromMap(map, originalName, currentTrackedLayers);
     });
 
-    // Handle visibility changes for existing layers
-    activeMapLayers.forEach(layer => {
+    // Update visibility for existing layers
+    activeLayers.forEach(layer => {
       const originalName = layer.original_name || layer.name;
       if (currentTrackedLayers.has(originalName)) {
         updateLayerVisibility(map, layer, currentTrackedLayers);
       }
     });
-
-  }, [activeMapLayers, mapRef, user]);
+  };
 
   // Function to add a layer to the map
   const addLayerToMap = (map, layer, trackedLayers) => {
@@ -123,6 +200,16 @@ const MapSourceAndLayer = ({ mapRef, activeMapLayers }) => {
     const layerId = `${originalName}-layer`;
 
     try {
+      console.log(`🔄 Attempting to add layer: ${originalName}`, {
+        layer: layer,
+        existing_source: !!map.getSource(sourceId),
+        existing_layer: !!map.getLayer(layerId),
+        mapReadyState: {
+          isStyleLoaded: map.isStyleLoaded(),
+          loaded: map.loaded()
+        }
+      });
+
       // Prepare layer data for tracking
       const layerData = {
         original_name: originalName,
@@ -131,14 +218,26 @@ const MapSourceAndLayer = ({ mapRef, activeMapLayers }) => {
         mapbox_layer: layer.mapbox_layer || generateDefaultLayer(originalName, layer)
       };
 
+      console.log(`🎨 Generated layer configuration for ${originalName}:`, {
+        mapbox_type: layerData.mapbox_type,
+        source_url: layerData.mapbox_source.tiles?.[0],
+        paint: layerData.mapbox_layer.paint
+      });
+
       // Add source if it doesn't exist
       if (!map.getSource(sourceId)) {
+        console.log(`📡 Adding source: ${sourceId}`, layerData.mapbox_source);
         map.addSource(sourceId, layerData.mapbox_source);
+      } else {
+        console.log(`📡 Source ${sourceId} already exists, skipping`);
       }
 
       // Add layer if it doesn't exist
       if (!map.getLayer(layerId)) {
+        console.log(`🎨 Adding layer: ${layerId}`, layerData.mapbox_layer);
         map.addLayer(layerData.mapbox_layer);
+      } else {
+        console.log(`🎨 Layer ${layerId} already exists, skipping`);
       }
 
       // Handle polygon layers (fill + stroke)
@@ -148,6 +247,7 @@ const MapSourceAndLayer = ({ mapRef, activeMapLayers }) => {
         
         if (!map.getLayer(fillLayerId)) {
           const fillLayer = { ...layerData.mapbox_layer, id: fillLayerId, type: 'fill' };
+          console.log(`🎨 Adding fill layer: ${fillLayerId}`);
           map.addLayer(fillLayer);
         }
         
@@ -162,6 +262,7 @@ const MapSourceAndLayer = ({ mapRef, activeMapLayers }) => {
               'line-opacity': 0.8
             }
           };
+          console.log(`🎨 Adding stroke layer: ${strokeLayerId}`);
           map.addLayer(strokeLayer);
         }
       }
@@ -169,54 +270,67 @@ const MapSourceAndLayer = ({ mapRef, activeMapLayers }) => {
       // Track the layer
       trackedLayers.set(originalName, layerData);
 
-      // Enhanced logging for layer addition - show mapbox_source and mapbox_layer details
-      console.log(`➕ Layer added: ${originalName}-layer, ${originalName}-source`);
-      console.log(`📊 Layer Details:`, {
-        original_name: layerData.original_name,
-        mapbox_type: layerData.mapbox_type
-      });
-      console.log(`🗂️ Mapbox Source:`, layerData.mapbox_source);
-      console.log(`🎨 Mapbox Layer:`, layerData.mapbox_layer);
+      console.log(`✅ Successfully added layer: ${originalName}`);
+
+      // Force map to re-render
+      map.triggerRepaint();
 
     } catch (error) {
-      console.error(`Failed to add layer ${originalName}:`, error);
+      console.error(`❌ Failed to add layer ${originalName}:`, error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        layer: layer
+      });
     }
   };
 
   // Function to remove a layer from the map
   const removeLayerFromMap = (map, originalName, trackedLayers) => {
     try {
+      console.log(`🔄 Attempting to remove layer: ${originalName}`);
+      
       const trackedLayer = trackedLayers.get(originalName);
       const sourceId = `${originalName}-source`;
       const layerId = `${originalName}-layer`;
       const fillLayerId = `${originalName}-fill`;
       const strokeLayerId = `${originalName}-stroke`;
 
+      console.log(`🗑️ Removing layer components for ${originalName}:`, {
+        hasTrackedLayer: !!trackedLayer,
+        layersToRemove: [layerId, fillLayerId, strokeLayerId],
+        sourceToRemove: sourceId
+      });
+
       // Remove layers
       [layerId, fillLayerId, strokeLayerId].forEach(id => {
         if (map.getLayer(id)) {
+          console.log(`  🎨 Removing layer: ${id}`);
           map.removeLayer(id);
+        } else {
+          console.log(`  ⚠️ Layer ${id} not found on map`);
         }
       });
 
       // Remove source
       if (map.getSource(sourceId)) {
+        console.log(`  📡 Removing source: ${sourceId}`);
         map.removeSource(sourceId);
+      } else {
+        console.log(`  ⚠️ Source ${sourceId} not found on map`);
       }
 
       // Remove from tracking
       trackedLayers.delete(originalName);
 
-      // Simple log for layer removal - only what you requested
-      console.log(`🗑️ Layer removed: ${originalName}-layer, ${originalName}-source`, {
-        original_name: originalName,
-        mapbox_type: trackedLayer?.mapbox_type,
-        mapbox_source: trackedLayer?.mapbox_source,
-        mapbox_layer: trackedLayer?.mapbox_layer
-      });
+      console.log(`✅ Successfully removed layer: ${originalName}`);
 
     } catch (error) {
-      console.error(`Failed to remove layer ${originalName}:`, error);
+      console.error(`❌ Failed to remove layer ${originalName}:`, error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack
+      });
     }
   };
 

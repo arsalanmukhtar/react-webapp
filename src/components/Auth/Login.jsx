@@ -26,7 +26,7 @@ const Login = () => {
             if (loginRes.ok) {
                 const data = await loginRes.json();
                 const accessToken = data.access_token;
-                console.log('Login successful! Access Token:', accessToken);
+                // console.log('Login successful! Access Token:', accessToken);
 
                 login(accessToken);
 
@@ -40,7 +40,7 @@ const Login = () => {
 
                 if (userMeRes.ok) {
                     const userData = await userMeRes.json();
-                    console.log('Successfully fetched user data from /api/data/users/me:', userData);
+                    // console.log('Successfully fetched user data from /api/data/users/me:', userData);
                     navigate('/map-dashboard');
                 } else {
                     console.error('Failed to fetch user data from /api/data/users/me');
