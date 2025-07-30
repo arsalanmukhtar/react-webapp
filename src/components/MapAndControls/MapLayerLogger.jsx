@@ -36,7 +36,7 @@ const MapLayerLogger = ({ activeMapLayers, user }) => {
         }
 
         // Batch multiple rapid changes together
-        batchTimeout.current = setTimeout(() => {
+        batchTimeout.current = setTimeout(async () => {
             // Debounce mechanism to prevent duplicate logging
             const now = Date.now();
             if (now - lastLogTime.current < 50) return; // Prevent logging within 50ms
@@ -71,10 +71,39 @@ const MapLayerLogger = ({ activeMapLayers, user }) => {
             console.log(layer);
         });
 
-        // Log visibility changes
-        visibilityChanges.forEach(layer => {
-            console.log(layer);
-        });
+        // Log visibility changes with fresh database state
+        if (visibilityChanges.length > 0) {
+            // Fetch all layers to get fresh database state
+            try {
+                const res = await fetch('/api/data/users/me/map_layers', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const freshLayers = await res.json();
+                    
+                    // Log each visibility change with fresh database state
+                    visibilityChanges.forEach(layer => {
+                        const freshLayer = freshLayers.find(fl => fl.id === layer.id);
+                        if (freshLayer) {
+                            console.log(freshLayer);
+                        } else {
+                            // Fallback to current state if not found
+                            console.log(layer);
+                        }
+                    });
+                } else {
+                    // Fallback to current state if fetch fails
+                    visibilityChanges.forEach(layer => {
+                        console.log(layer);
+                    });
+                }
+            } catch (error) {
+                // Fallback to current state if there's an error
+                visibilityChanges.forEach(layer => {
+                    console.log(layer);
+                });
+            }
+        }
 
         // Update the reference for next comparison
         previousLayersRef.current = currentLayers.map(layer => ({ ...layer }));

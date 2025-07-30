@@ -1,24 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import CatalogExplorerContent from './CatalogExplorerContent';
-// import DatasetUploadContent from './DatasetUploadContent';
+import TabNavigation from './TabNavigation';
+import ActionButtons from './ActionButtons';
+import ModalContentRenderer from './ModalContentRenderer';
+import { prettyPrintName, capitalizeFirstLetter } from './DataUtils';
 import { useAuth } from '../../../contexts/AuthContext';
-
-// Function to pretty print table names (e.g., convert snake_case to Title Case)
-const prettyPrintName = (name) => {
-    if (!name) return '';
-    return name
-        .replace(/[-_]/g, ' ') // Replace hyphens and underscores with spaces
-        .split(' ') // Split by spaces
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize first letter of each word
-        .join(' '); // Join back with spaces
-};
-
-// Helper to capitalize the first letter of a string
-const capitalizeFirstLetter = (string) => {
-    if (!string) return 'Unknown';
-    return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase();
-};
-
 
 const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap, catalogTables, catalogLoading, catalogError }) => {
     const { token } = useAuth();
@@ -53,11 +38,9 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap, catalog
 
     if (!isOpen) return null;
 
-
-    let modalTitle = "Dataset Control Panel";
-    let modalContent;
-    let showActionButtons = true;
-    let isAddDataButtonEnabled = false;
+    const modalTitle = "Dataset Control Panel";
+    const showActionButtons = true;
+    const isAddDataButtonEnabled = activeTab === 'catalog' ? selectedTables.length > 0 : false;
 
     // Function to toggle selection of a table (correctly updates array state)
     const handleToggleSelectTable = (tableToToggle) => {
@@ -92,28 +75,6 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap, catalog
         }
     };
 
-    switch (activeTab) {
-        case 'catalog':
-            isAddDataButtonEnabled = selectedTables.length > 0;
-            modalContent = (
-                <CatalogExplorerContent
-                    tables={catalogTables}
-                    loading={catalogLoading}
-                    error={catalogError}
-                    selectedTables={selectedTables}
-                    onToggleSelectTable={handleToggleSelectTable}
-                />
-            );
-            break;
-        case 'external':
-            isAddDataButtonEnabled = false;
-            modalContent = <p className="text-gray-600 text-sm">Link to external datasets.</p>;
-            break;
-        default:
-            modalContent = <p className="text-gray-600 text-sm">Select a tab to explore data.</p>;
-            break;
-    }
-
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             {/* Overlay */}
@@ -128,47 +89,26 @@ const DataExplorerModal = ({ isOpen, onClose, initialTab, addLayerToMap, catalog
                     <h2 className="text-xl font-semibold text-gray-800">{modalTitle}</h2>
                 </div>
 
-                {/* Tabs for Data Explorer options */}
-                <div className="flex border-b border-gray-200 mb-4 -mx-6 px-6 pt-2">
-                    <button
-                        onClick={() => setActiveTab('catalog')}
-                        className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors duration-200
-                                    ${activeTab === 'catalog' ? 'border-green-500 text-green-500' : 'border-transparent text-gray-700 hover:text-gray-700'}`}
-                    >
-                        Catalog Explorer
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('external')}
-                        className={`ml-4 px-4 py-2 text-sm font-semibold border-b-2 transition-colors duration-200
-                                    ${activeTab === 'external' ? 'border-green-500 text-green-500' : 'border-transparent text-gray-700 hover:text-gray-700'}`}
-                    >
-                        Dataset External
-                    </button>
-                </div>
+                <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
 
                 {/* Modal Body Content */}
                 <div className="flex-1 overflow-hidden">
-                    {modalContent}
+                    <ModalContentRenderer
+                        activeTab={activeTab}
+                        catalogTables={catalogTables}
+                        catalogLoading={catalogLoading}
+                        catalogError={catalogError}
+                        selectedTables={selectedTables}
+                        onToggleSelectTable={handleToggleSelectTable}
+                    />
                 </div>
 
-                {showActionButtons && (
-                    <div className="flex justify-end space-x-2 mt-4">
-                        <button
-                            onClick={onClose}
-                            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-red-500 hover:text-white transition-colors duration-200 cursor-pointer"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleAddData}
-                            disabled={!isAddDataButtonEnabled}
-                            className={`px-4 py-2 rounded-md border border-green-400 transition-colors duration-200
-                                        ${isAddDataButtonEnabled ? 'bg-green-500 text-white hover:bg-green-600 hover:border-green-800 cursor-pointer' : 'bg-green-300 text-gray-500 cursor-not-allowed'}`}
-                        >
-                            Add Data
-                        </button>
-                    </div>
-                )}
+                <ActionButtons
+                    onClose={onClose}
+                    onAddData={handleAddData}
+                    isAddDataEnabled={isAddDataButtonEnabled}
+                    showButtons={showActionButtons}
+                />
             </div>
         </div>
     );
