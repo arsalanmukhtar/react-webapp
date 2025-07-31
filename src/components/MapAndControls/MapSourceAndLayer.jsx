@@ -1,10 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import MapLoadManager from './MapLoadManager';
 import LayerProcessor from './LayerProcessor';
 import LayerSynchronizer from './LayerSynchronizer';
 import { useAuth } from '../../contexts/AuthContext';
 
-const MapSourceAndLayer = ({ mapRef, activeMapLayers, onLayersProcessed, shouldProcessLayers }) => {
+const MapSourceAndLayer = ({ mapRef, activeMapLayers, onLayersProcessed, shouldProcessLayers, mapStyle }) => {
   const { user } = useAuth();
   const [isMapReady, setIsMapReady] = useState(false);
 
@@ -13,6 +13,11 @@ const MapSourceAndLayer = ({ mapRef, activeMapLayers, onLayersProcessed, shouldP
   }, []);
 
   const layerProcessor = LayerProcessor({ mapRef });
+
+  // Clear tracked layers when map style changes
+  useEffect(() => {
+    layerProcessor.clearAllLayers();
+  }, [mapStyle, layerProcessor]);
 
   const handleProcessLayers = useCallback((layers, userContext, mapLoaded) => {
     layerProcessor.processLayers(layers, userContext, mapLoaded);

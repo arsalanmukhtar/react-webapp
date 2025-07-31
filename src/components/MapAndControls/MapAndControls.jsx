@@ -110,13 +110,13 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
             // Create bounding box [minX, minY, maxX, maxY]
             const bbox = [sw.lng, sw.lat, ne.lng, ne.lat];
             
-            console.log('🗺️ Map Bounds Changed:', {
-                southWest: { lng: sw.lng, lat: sw.lat },
-                northEast: { lng: ne.lng, lat: ne.lat },
-                bbox: bbox,
-                zoom: newViewState.zoom,
-                center: { lng: newViewState.longitude, lat: newViewState.latitude }
-            });
+            // console.log('🗺️ Map Bounds Changed:', {
+            //     southWest: { lng: sw.lng, lat: sw.lat },
+            //     northEast: { lng: ne.lng, lat: ne.lat },
+            //     bbox: bbox,
+            //     zoom: newViewState.zoom,
+            //     center: { lng: newViewState.longitude, lat: newViewState.latitude }
+            // });
         }
     };
 
@@ -145,6 +145,22 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
 
     const handleMapError = (event) => {
         console.error('❌ Map loading error:', event);
+    };
+
+    // Handle style changes - re-add layers when basemap style changes
+    const handleStyleLoad = () => {
+        console.log('🎨 Map style loaded, re-processing layers...');
+        // When style changes, all custom layers are removed by Mapbox
+        // We need to trigger layer re-processing to add them back
+        setIsLoadingLayers(true);
+        
+        // Clear the layer tracking so they can be re-added
+        // This will be handled by the LayerProcessor reset
+        
+        // Small delay to ensure style is fully loaded
+        setTimeout(() => {
+            setIsLoadingLayers(false);
+        }, 1000);
     };
 
     // Handle when layers are processed
@@ -187,6 +203,7 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
                 activeMapLayers={activeMapLayers} 
                 onLayersProcessed={handleLayersProcessed}
                 shouldProcessLayers={!isLoadingLayers}
+                mapStyle={mapStyle}
             />
             
             <div className="map-background-container relative">
@@ -199,6 +216,7 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
                     onMove={handleViewStateChange}
                     onLoad={handleMapLoad}
                     onError={handleMapError}
+                    onStyleLoad={handleStyleLoad}
                     mapStyle={mapStyle}
                     mapboxAccessToken={MapboxAccessToken}
                     attributionControl={false}
