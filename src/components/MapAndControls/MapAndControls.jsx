@@ -4,6 +4,8 @@ import { FiPlus, FiMinus } from 'react-icons/fi';
 import { TiLocationArrowOutline } from 'react-icons/ti';
 import { useAuth } from '../../contexts/AuthContext';
 import MapLayerLogger from './MapLayerLogger';
+import MapSourceAndLayer from './MapSourceAndLayer';
+import MapLoadingOverlay from './MapLoadingOverlay';
 
 const MapboxAccessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 if (!MapboxAccessToken) {
@@ -48,6 +50,8 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
 
     const [viewState, setViewState] = useState(getInitialViewState);
     const [mapStyle, setMapStyle] = useState(user?.map_theme || defaultMapTheme);
+    const [isLoadingLayers, setIsLoadingLayers] = useState(false);
+    const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
 
     useEffect(() => {
         if (user) {
@@ -94,6 +98,26 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
             bearing: newViewState.bearing,
             pitch: newViewState.pitch
         }));
+
+        // Get map bounds whenever the view changes (zoom, pan, drag)
+        if (mapRef.current) {
+            const map = mapRef.current.getMap();
+            
+            const bounds = map.getBounds();
+            const sw = bounds.getSouthWest(); // lng, lat
+            const ne = bounds.getNorthEast(); // lng, lat
+            
+            // Create bounding box [minX, minY, maxX, maxY]
+            const bbox = [sw.lng, sw.lat, ne.lng, ne.lat];
+            
+            console.log('🗺️ Map Bounds Changed:', {
+                southWest: { lng: sw.lng, lat: sw.lat },
+                northEast: { lng: ne.lng, lat: ne.lat },
+                bbox: bbox,
+                zoom: newViewState.zoom,
+                center: { lng: newViewState.longitude, lat: newViewState.latitude }
+            });
+        }
     };
 
     const handleZoomIn = () => {
@@ -114,16 +138,67 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
         }
     };
 
+    // Handle map load events
+    const handleMapLoad = () => {
+        // Map loaded
+    };
+
+    const handleMapError = (event) => {
+        console.error('❌ Map loading error:', event);
+    };
+
+    // Handle when layers are processed
+    const handleLayersProcessed = () => {
+        setIsLoadingLayers(false);
+        setHasInitiallyLoaded(true);
+    };
+
+    // Show loading animation only on initial login with layers, not on subsequent layer changes
+    useEffect(() => {
+        if (user && activeMapLayers?.length > 0 && !hasInitiallyLoaded) {
+            setIsLoadingLayers(true);
+            
+            const timer = setTimeout(() => {
+                setIsLoadingLayers(false);
+                setHasInitiallyLoaded(true);
+            }, 7000); // Increased to 7 seconds to give more time for map style loading
+            
+            return () => clearTimeout(timer);
+        } else {
+            setIsLoadingLayers(false);
+        }
+    }, [user?.id, activeMapLayers?.length, hasInitiallyLoaded]);
+
+    // Reset initial loading state when user changes (logs out/in)
+    useEffect(() => {
+        if (!user) {
+            setHasInitiallyLoaded(false);
+        }
+    }, [user]);
+
     return (
         <>
             {/* Map Layer Logger Component - logs all layer database operations */}
             <MapLayerLogger activeMapLayers={activeMapLayers} user={user} />
             
-            <div className="map-background-container">
+            {/* Map Source and Layer Processing - handles actual map layer rendering */}
+            <MapSourceAndLayer 
+                mapRef={mapRef} 
+                activeMapLayers={activeMapLayers} 
+                onLayersProcessed={handleLayersProcessed}
+                shouldProcessLayers={!isLoadingLayers}
+            />
+            
+            <div className="map-background-container relative">
+                {/* Loading overlay */}
+                <MapLoadingOverlay isVisible={isLoadingLayers} />
+                
                 <Map
                     ref={mapRef}
                     {...viewState}
                     onMove={handleViewStateChange}
+                    onLoad={handleMapLoad}
+                    onError={handleMapError}
                     mapStyle={mapStyle}
                     mapboxAccessToken={MapboxAccessToken}
                     attributionControl={false}

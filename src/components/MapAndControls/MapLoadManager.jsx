@@ -5,53 +5,86 @@ import { useEffect, useRef, useState } from 'react';
  */
 const MapLoadManager = ({ mapRef, user, onMapReady }) => {
   const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const loadCheckIntervalRef = useRef(null);
 
   useEffect(() => {
-    console.log('🔧 Map setup effect triggered', {
-      hasMapRef: !!mapRef.current,
-      hasUser: !!user,
-      isMapLoaded: isMapLoaded
-    });
-
     if (!mapRef.current) {
-      console.log('⚠️ MapLoadManager: No mapRef, exiting');
       return;
     }
 
     // Handle user logout - clear everything
     if (!user) {
-      console.log('🚪 User logged out, resetting map load state');
       setIsMapLoaded(false);
+      if (loadCheckIntervalRef.current) {
+        clearInterval(loadCheckIntervalRef.current);
+      }
       return;
     }
 
     const map = mapRef.current.getMap();
 
-    const handleMapReady = () => {
-      console.log('🗺️ Map is ready for layers');
-      setIsMapLoaded(true);
-      onMapReady(true);
+    const checkMapReady = () => {
+      const styleLoaded = map.isStyleLoaded();
+      const mapLoaded = map.loaded();
+      const readyState = styleLoaded && mapLoaded;
+      
+      return readyState;
     };
 
-    // Check if map is ready
-    if (map.isStyleLoaded() && map.loaded()) {
+    const handleMapReady = () => {
+      setIsMapLoaded(true);
+      onMapReady(true);
+      
+      // Clear the interval once map is ready
+      if (loadCheckIntervalRef.current) {
+        clearInterval(loadCheckIntervalRef.current);
+      }
+    };
+
+    // Check if map is already ready
+    if (checkMapReady()) {
       handleMapReady();
     } else {
-      // Listen for map to be ready
+      // Set up event listeners
       const onLoad = () => {
-        if (map.isStyleLoaded() && map.loaded()) {
+        if (checkMapReady()) {
           handleMapReady();
         }
       };
       
+      const onStyleData = () => {
+        if (checkMapReady()) {
+          handleMapReady();
+        }
+      };
+
+      const onSourceData = () => {
+        if (checkMapReady()) {
+          handleMapReady();
+        }
+      };
+      
+      // Listen for various map events
       map.on('load', onLoad);
-      map.on('styledata', onLoad);
+      map.on('styledata', onStyleData);
+      map.on('sourcedata', onSourceData);
+
+      // Also poll every 100ms as a fallback
+      loadCheckIntervalRef.current = setInterval(() => {
+        if (checkMapReady()) {
+          handleMapReady();
+        }
+      }, 100);
 
       // Cleanup
       return () => {
         if (map && !map._removed) {
           map.off('load', onLoad);
-          map.off('styledata', onLoad);
+          map.off('styledata', onStyleData);
+          map.off('sourcedata', onSourceData);
+        }
+        if (loadCheckIntervalRef.current) {
+          clearInterval(loadCheckIntervalRef.current);
         }
       };
     }

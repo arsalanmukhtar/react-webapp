@@ -29,7 +29,7 @@ const LayerProcessor = ({ mapRef }) => {
   // Helper function to generate default layer
   const generateDefaultLayer = (originalName, layer) => {
     const mapboxType = layer.mapbox_type || getMapboxTypeFromGeometry(layer.geometry_type);
-    const color = layer.color || '#007cbf';
+    const color = layer.color || '#000000';
 
     let paint = {};
     switch (mapboxType) {
@@ -62,7 +62,7 @@ const LayerProcessor = ({ mapRef }) => {
       id: `${originalName}-layer`,
       type: mapboxType,
       source: `${originalName}-source`,
-      'source-layer': originalName,
+      'source-layer': 'features', // Use 'features' as the source-layer name
       layout: {
         visibility: 'visible'
       },
@@ -77,225 +77,160 @@ const LayerProcessor = ({ mapRef }) => {
     const layerId = `${originalName}-layer`;
 
     try {
-      console.log(`🔄 Attempting to add layer: ${originalName}`, {
-        layer: layer,
-        existing_source: !!map.getSource(sourceId),
-        existing_layer: !!map.getLayer(layerId),
-        mapReadyState: {
-          isStyleLoaded: map.isStyleLoaded(),
-          loaded: map.loaded()
-        }
-      });
-
-      // Prepare layer data for tracking
-      const layerData = {
-        original_name: originalName,
-        mapbox_type: layer.mapbox_type || getMapboxTypeFromGeometry(layer.geometry_type),
-        mapbox_source: layer.mapbox_source || generateDefaultSource(originalName),
-        mapbox_layer: layer.mapbox_layer || generateDefaultLayer(originalName, layer)
-      };
-
-      console.log(`🎨 Generated layer configuration for ${originalName}:`, {
-        mapbox_type: layerData.mapbox_type,
-        source_url: layerData.mapbox_source.tiles?.[0],
-        paint: layerData.mapbox_layer.paint
-      });
+      // Use the database attributes: mapbox_source and mapbox_layer
+      // Priority: 1) Database stored values, 2) Generated defaults only if no DB values
+      const mapboxSource = layer.mapbox_source ? 
+        (typeof layer.mapbox_source === 'string' ? JSON.parse(layer.mapbox_source) : layer.mapbox_source) : 
+        generateDefaultSource(originalName);
+      
+      const mapboxLayer = layer.mapbox_layer ? 
+        (typeof layer.mapbox_layer === 'string' ? JSON.parse(layer.mapbox_layer) : layer.mapbox_layer) : 
+        generateDefaultLayer(originalName, layer);
 
       // Add source if it doesn't exist
       if (!map.getSource(sourceId)) {
-        console.log(`📡 Adding source: ${sourceId}`, layerData.mapbox_source);
-        map.addSource(sourceId, layerData.mapbox_source);
-      } else {
-        console.log(`📡 Source ${sourceId} already exists, skipping`);
+        map.addSource(sourceId, mapboxSource);
       }
 
       // Add layer if it doesn't exist
       if (!map.getLayer(layerId)) {
-        console.log(`🎨 Adding layer: ${layerId}`, layerData.mapbox_layer);
-        map.addLayer(layerData.mapbox_layer);
-      } else {
-        console.log(`🎨 Layer ${layerId} already exists, skipping`);
-      }
-
-      // Handle polygon layers (fill + stroke)
-      if (layerData.mapbox_type === 'fill') {
-        const fillLayerId = `${originalName}-fill`;
-        const strokeLayerId = `${originalName}-stroke`;
+        map.addLayer(mapboxLayer);
         
-        if (!map.getLayer(fillLayerId)) {
-          const fillLayer = { ...layerData.mapbox_layer, id: fillLayerId, type: 'fill' };
-          console.log(`🎨 Adding fill layer: ${fillLayerId}`);
-          map.addLayer(fillLayer);
-        }
+        // Prioritize frontend isVisible state over database is_visible state
+        const shouldBeVisible = layer.isVisible !== undefined ? layer.isVisible === true : layer.is_visible === true;
+        const initialVisibility = shouldBeVisible ? 'visible' : 'none';
         
-        if (!map.getLayer(strokeLayerId)) {
-          const strokeLayer = { 
-            ...layerData.mapbox_layer, 
-            id: strokeLayerId, 
-            type: 'line',
-            paint: {
-              'line-color': layer.color || '#007cbf',
-              'line-width': 2,
-              'line-opacity': 0.8
-            }
-          };
-          console.log(`🎨 Adding stroke layer: ${strokeLayerId}`);
-          map.addLayer(strokeLayer);
-        }
+        map.setLayoutProperty(layerId, 'visibility', initialVisibility);
       }
 
       // Track the layer
-      trackedLayersRef.current.set(originalName, layerData);
-
-      console.log(`✅ Successfully added layer: ${originalName}`);
+      trackedLayersRef.current.set(originalName, {
+        original_name: originalName,
+        mapbox_source: mapboxSource,
+        mapbox_layer: mapboxLayer,
+        is_visible: layer.is_visible,
+        isVisible: layer.isVisible
+      });
 
       // Force map to re-render
       map.triggerRepaint();
 
     } catch (error) {
       console.error(`❌ Failed to add layer ${originalName}:`, error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        layer: layer
-      });
     }
   };
 
   // Function to remove a layer from the map
   const removeLayerFromMap = (map, originalName) => {
     try {
-      console.log(`🔄 Attempting to remove layer: ${originalName}`);
-      
-      const trackedLayer = trackedLayersRef.current.get(originalName);
-      const sourceId = `${originalName}-source`;
       const layerId = `${originalName}-layer`;
-      const fillLayerId = `${originalName}-fill`;
-      const strokeLayerId = `${originalName}-stroke`;
+      const sourceId = `${originalName}-source`;
 
-      console.log(`🗑️ Removing layer components for ${originalName}:`, {
-        hasTrackedLayer: !!trackedLayer,
-        layersToRemove: [layerId, fillLayerId, strokeLayerId],
-        sourceToRemove: sourceId
-      });
+      // Check if the layer exists before removing it
+      if (map.getLayer(layerId)) {
+        map.removeLayer(layerId);
+      }
 
-      // Remove layers
-      [layerId, fillLayerId, strokeLayerId].forEach(id => {
-        if (map.getLayer(id)) {
-          console.log(`  🎨 Removing layer: ${id}`);
-          map.removeLayer(id);
-        } else {
-          console.log(`  ⚠️ Layer ${id} not found on map`);
-        }
-      });
-
-      // Remove source
+      // Check if the source exists before removing it
       if (map.getSource(sourceId)) {
-        console.log(`  📡 Removing source: ${sourceId}`);
         map.removeSource(sourceId);
-      } else {
-        console.log(`  ⚠️ Source ${sourceId} not found on map`);
       }
 
       // Remove from tracking
       trackedLayersRef.current.delete(originalName);
 
-      console.log(`✅ Successfully removed layer: ${originalName}`);
-
     } catch (error) {
       console.error(`❌ Failed to remove layer ${originalName}:`, error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack
-      });
     }
   };
 
   // Function to update layer visibility
   const updateLayerVisibility = (map, layer) => {
     const originalName = layer.original_name || layer.name;
-    const isVisible = layer.is_visible !== false && layer.isVisible !== false;
-    const visibility = isVisible ? 'visible' : 'none';
-    
     const layerId = `${originalName}-layer`;
-    const fillLayerId = `${originalName}-fill`;
-    const strokeLayerId = `${originalName}-stroke`;
+    
+    // Prioritize frontend isVisible state over database is_visible state
+    // If isVisible is explicitly set (not undefined), use it; otherwise fall back to is_visible
+    const shouldBeVisible = layer.isVisible !== undefined ? layer.isVisible === true : layer.is_visible === true;
+    
+    // Convert to Mapbox visibility string
+    const visibility = shouldBeVisible ? 'visible' : 'none';
 
     try {
-      [layerId, fillLayerId, strokeLayerId].forEach(id => {
-        if (map.getLayer(id)) {
-          map.setLayoutProperty(id, 'visibility', visibility);
-        }
-      });
+      // Check if layer exists before setting visibility
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, 'visibility', visibility);
+      }
     } catch (error) {
-      console.error(`Failed to update visibility for layer ${originalName}:`, error);
+      console.error(`❌ Failed to update visibility for layer ${originalName}:`, error);
     }
   };
 
   const processLayers = (activeMapLayers, user, isMapLoaded) => {
-    if (!mapRef.current || !user || !isMapLoaded) {
-      console.log('⚠️ processLayers: Prerequisites not met');
+    if (!mapRef.current || !user) {
       return;
     }
 
     const map = mapRef.current.getMap();
+    
+    // Check if map style is fully loaded before processing layers
+    if (!map.isStyleLoaded()) {
+      // Wait for style to load and then retry
+      setTimeout(() => {
+        processLayers(activeMapLayers, user, isMapLoaded);
+      }, 500);
+      return;
+    }
+
     const activeLayers = activeMapLayers || [];
 
-    console.log('🎯 Processing layers:', {
-      activeLayersCount: activeLayers.length,
-      trackedLayersCount: trackedLayersRef.current.size,
-      activeLayers: activeLayers
-    });
-
-    // Create set of currently active visible layer names
-    const activeLayerNames = new Set(
-      activeLayers
-        .filter(layer => layer.is_visible !== false && layer.isVisible !== false)
-        .map(layer => layer.original_name || layer.name)
-    );
-
-    // Find layers to add
-    const layersToAdd = activeLayers.filter(layer => {
+    // Step 1: Add all layers to map (if not already added)
+    activeLayers.forEach(layer => {
       const originalName = layer.original_name || layer.name;
-      const shouldBeVisible = layer.is_visible !== false && layer.isVisible !== false;
-      const isNotTracked = !trackedLayersRef.current.has(originalName);
-      return shouldBeVisible && isNotTracked;
+      
+      // Add layer if it doesn't exist
+      if (!trackedLayersRef.current.has(originalName)) {
+        addLayerToMap(map, layer);
+      }
     });
 
-    // Find layers to remove
+    // Step 2: Get all layer IDs that should be visible
+    const visibleLayerIds = activeLayers
+      .filter(layer => {
+        // Prioritize frontend isVisible state over database is_visible state
+        // If isVisible is explicitly set (not undefined), use it; otherwise fall back to is_visible
+        const shouldBeVisible = layer.isVisible !== undefined ? layer.isVisible === true : layer.is_visible === true;
+        return shouldBeVisible;
+      })
+      .map(layer => `${layer.original_name || layer.name}-layer`);
+
+    // Step 3: Get all existing layer IDs from tracked layers
+    const allTrackedLayerIds = Array.from(trackedLayersRef.current.keys())
+      .map(originalName => `${originalName}-layer`);
+
+    // Step 4: Update visibility for all layers
+    allTrackedLayerIds.forEach((layerId) => {
+      if (map.getLayer(layerId)) {
+        if (visibleLayerIds.includes(layerId)) {
+          map.setLayoutProperty(layerId, 'visibility', 'visible');
+        } else {
+          map.setLayoutProperty(layerId, 'visibility', 'none');
+        }
+      }
+    });
+
+    // Step 5: Remove layers that are no longer in activeMapLayers
+    const currentLayerNames = new Set(activeLayers.map(layer => layer.original_name || layer.name));
     const layersToRemove = [];
+    
     trackedLayersRef.current.forEach((trackedLayer, originalName) => {
-      if (!activeLayerNames.has(originalName)) {
+      if (!currentLayerNames.has(originalName)) {
         layersToRemove.push(originalName);
       }
     });
 
-    console.log('📊 Layer operations:', {
-      toAdd: layersToAdd.length,
-      toRemove: layersToRemove.length,
-      currentMapLayers: map.getStyle().layers?.map(l => l.id) || [],
-      currentMapSources: Object.keys(map.getStyle().sources || {})
-    });
-
-    // Add new layers
-    layersToAdd.forEach(layer => {
-      const originalName = layer.original_name || layer.name;
-      console.log(`➕ Adding layer: ${originalName}`);
-      addLayerToMap(map, layer);
-    });
-
-    // Remove old layers
     layersToRemove.forEach(originalName => {
-      console.log(`🗑️ Removing layer: ${originalName}`);
       removeLayerFromMap(map, originalName);
-    });
-
-    // Update visibility for existing layers
-    activeLayers.forEach(layer => {
-      const originalName = layer.original_name || layer.name;
-      if (trackedLayersRef.current.has(originalName)) {
-        updateLayerVisibility(map, layer);
-      }
     });
   };
 
