@@ -61,6 +61,7 @@ class MapLayer(Base):
     mapbox_type = Column(String(50), nullable=True)  # New: Mapbox layer type (circle, line, fill)
     mapbox_source = Column(JSON, nullable=True)      # New: JSONB field for map.addSource definition
     mapbox_layer = Column(JSON, nullable=True)       # New: JSONB field for map.addLayer definition
+    mapbox_filter = Column(JSON, nullable=True)      # New: JSONB field for Mapbox layer filters
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -71,3 +72,15 @@ class MapLayer(Base):
 
     def __repr__(self):
         return f"<MapLayer(id={self.id}, user_id={self.user_id}, name='{self.name}', is_visible={self.is_visible})>"
+
+
+# --- LayerFilter Model ---
+class LayerFilter(Base):
+    __tablename__ = "layer_filters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    layer_name = Column(Text, nullable=False, index=True)
+    layer_filter = Column(JSON, nullable=True)  # JSONB field for filter definitions
+
+    def __repr__(self):
+        return f"<LayerFilter(id={self.id}, layer_name='{self.layer_name}', has_filter={self.layer_filter is not None})>"

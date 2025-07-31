@@ -11,12 +11,13 @@ from sqlalchemy import inspect, text # Import text for raw SQL queries
 from typing import Dict, Optional, List, Any
 
 from .database import get_db, engine
-from .models import User, MapLayer
-from .schemas import UserResponse, UserSettingsUpdate, MapSettingsUpdate, TableSchema, ColumnSchema, MapLayerResponse, MapLayerCreate, MapLayerUpdate
+from .models import User, MapLayer, LayerFilter
+from .schemas import UserResponse, UserSettingsUpdate, MapSettingsUpdate, TableSchema, ColumnSchema, MapLayerResponse, MapLayerCreate, MapLayerUpdate, LayerFilterResponse
 from .auth import (
     get_current_user,
     get_password_hash
 )
+from .tiling_operations import apply_layer_filter
 
 # Initialize FastAPI Router for data routes
 router = APIRouter(
@@ -228,20 +229,53 @@ async def get_layers_tables():
 async def get_user_map_layers(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Get all map layers for the current user.
+    Populates mapbox_filter field based on layer_name match from layers_filters table.
     """
     layers = db.query(MapLayer).filter(MapLayer.user_id == current_user.id).all()
+    
+    # Populate mapbox_filter for each layer
+    for layer in layers:
+        if not layer.mapbox_filter:
+            # Try to get filter from layer_filters table based on layer name
+            layer_name = layer.original_name or layer.name
+            print(f"🔍 Trying to populate filter for existing layer: '{layer_name}'")
+            filter_config = apply_layer_filter(layer_name)
+            if filter_config:
+                print(f"✅ Got filter config for existing layer '{layer_name}': {filter_config}")
+                layer.mapbox_filter = filter_config
+                # Optionally save to database for future use
+                db.commit()
+            else:
+                print(f"❌ No filter config found for existing layer '{layer_name}'")
+    
     return layers
 
 @router.post("/users/me/map_layers", response_model=MapLayerResponse, dependencies=[Depends(get_current_user)])
 async def add_user_map_layer(layer: MapLayerCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Add a new map layer for the current user. Unique by (user_id, name).
+    Automatically populates mapbox_filter based on layer name if available.
     """
-    db_layer = MapLayer(**layer.dict(), user_id=current_user.id)
+    layer_data = layer.dict()
+    
+    # Populate mapbox_filter if not provided
+    if not layer_data.get('mapbox_filter'):
+        layer_name = layer_data.get('original_name') or layer_data.get('name')
+        print(f"🔍 Trying to get filter for layer: '{layer_name}'")
+        filter_config = apply_layer_filter(layer_name)
+        if filter_config:
+            print(f"✅ Got filter config for layer '{layer_name}': {filter_config}")
+            layer_data['mapbox_filter'] = filter_config
+        else:
+            print(f"❌ No filter config found for layer '{layer_name}'")
+    
+    print(f"📝 Creating layer with data: {layer_data}")
+    db_layer = MapLayer(**layer_data, user_id=current_user.id)
     db.add(db_layer)
     try:
         db.commit()
         db.refresh(db_layer)
+        print(f"✅ Layer created successfully: {db_layer.name}, mapbox_filter: {db_layer.mapbox_filter}")
         return db_layer
     except IntegrityError as e:
         db.rollback()
@@ -272,3 +306,72 @@ async def delete_user_map_layer(layer_id: int, current_user: User = Depends(get_
     db.delete(db_layer)
     db.commit()
     return {"detail": "Layer deleted."}
+
+@router.get("/layer_filters", response_model=List[LayerFilterResponse])
+async def get_layer_filters(db: Session = Depends(get_db)):
+    """
+    Get all layer filters from the layer_filters table.
+    These filters are used to apply zoom-based filtering to map layers.
+    """
+    try:
+        print("🔍 API: Getting all layer filters...")
+        filters = db.query(LayerFilter).all()
+        print(f"✅ API: Found {len(filters)} layer filters")
+        return filters
+    except Exception as e:
+        print(f"❌ API: Error getting layer filters: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Internal server error while fetching layer filters: {str(e)}"
+        )
+
+@router.get("/layer_filters/{layer_name}", response_model=LayerFilterResponse)
+async def get_layer_filter_by_name(layer_name: str, db: Session = Depends(get_db)):
+    """
+    Get filter configuration for a specific layer by name.
+    Returns the filter that should be applied to the layer.
+    """
+    try:
+        print(f"🔍 API: Looking for filter for layer: '{layer_name}'")
+        layer_filter = db.query(LayerFilter).filter(LayerFilter.layer_name == layer_name).first()
+        
+        if not layer_filter:
+            print(f"❌ API: No filter found for layer: '{layer_name}'")
+            # Let's check what layer names exist in the database
+            all_filters = db.query(LayerFilter).all()
+            available_names = [f.layer_name for f in all_filters]
+            print(f"📋 API: Available layer names: {available_names}")
+            raise HTTPException(status_code=404, detail=f"Filter not found for layer: {layer_name}. Available layers: {available_names}")
+        
+        print(f"✅ API: Found filter for layer: '{layer_name}'")
+        return layer_filter
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404)
+        raise
+    except Exception as e:
+        print(f"❌ API: Unexpected error getting filter for layer '{layer_name}': {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Internal server error while fetching filter for layer '{layer_name}': {str(e)}"
+        )
+
+@router.post("/users/me/map_layers/refresh_filters", response_model=dict, dependencies=[Depends(get_current_user)])
+async def refresh_layer_filters(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Refresh mapbox_filter for all user's layers based on current layer_filters table.
+    Useful when filter configurations are updated in the database.
+    """
+    layers = db.query(MapLayer).filter(MapLayer.user_id == current_user.id).all()
+    updated_count = 0
+    
+    for layer in layers:
+        layer_name = layer.original_name or layer.name
+        filter_config = apply_layer_filter(layer_name)
+        
+        # Update the layer's filter (even if it's None/empty to clear old filters)
+        layer.mapbox_filter = filter_config
+        updated_count += 1
+    
+    db.commit()
+    return {"detail": f"Refreshed filters for {updated_count} layers"}

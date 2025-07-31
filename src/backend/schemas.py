@@ -114,8 +114,9 @@ class MapLayerBase(BaseModel):
     srid: Optional[str] = None
     feature_count: Optional[int] = None
     mapbox_type: Optional[str] = None
-    mapbox_source: Optional[dict] = None
-    mapbox_layer: Optional[dict] = None
+    mapbox_source: Optional[Any] = None  # Can be any JSON structure
+    mapbox_layer: Optional[Any] = None   # Can be any JSON structure
+    mapbox_filter: Optional[Any] = None  # Can be any JSON structure (array, object, etc.)
 
 class MapLayerCreate(MapLayerBase):
     pass
@@ -129,6 +130,20 @@ class MapLayerResponse(MapLayerBase):
     user_id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+# Schema for LayerFilter table
+class LayerFilterBase(BaseModel):
+    layer_name: str
+    layer_filter: Optional[Any] = None  # Can be array, object, or any JSON structure
+
+class LayerFilterCreate(LayerFilterBase):
+    pass
+
+class LayerFilterResponse(LayerFilterBase):
+    id: int
 
     class Config:
         orm_mode = True

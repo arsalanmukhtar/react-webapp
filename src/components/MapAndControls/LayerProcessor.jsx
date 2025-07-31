@@ -96,6 +96,16 @@ const LayerProcessor = ({ mapRef }) => {
       if (!map.getLayer(layerId)) {
         map.addLayer(mapboxLayer);
         
+        // Apply mapbox_filter if available
+        if (layer.mapbox_filter && layer.mapbox_filter.filter) {
+          const filter = typeof layer.mapbox_filter === 'string' ? 
+            JSON.parse(layer.mapbox_filter).filter : layer.mapbox_filter.filter;
+          
+          if (filter && Array.isArray(filter)) {
+            map.setFilter(layerId, filter);
+          }
+        }
+        
         // Prioritize frontend isVisible state over database is_visible state
         const shouldBeVisible = layer.isVisible !== undefined ? layer.isVisible === true : layer.is_visible === true;
         const initialVisibility = shouldBeVisible ? 'visible' : 'none';

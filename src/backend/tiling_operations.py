@@ -10,7 +10,8 @@ from sqlalchemy.engine import Engine
 from .config import settings
 import mercantile
 from typing import Dict, List, Optional, Tuple
-from .database import engine, get_db_connection
+from .database import engine, get_db_connection, SessionLocal
+from .models import LayerFilter
 
 """
 MVT Tiling Operations with Optimized Point Clustering
@@ -18,18 +19,21 @@ MVT Tiling Operations with Optimized Point Clustering
 This module provides MVT (Mapbox Vector Tile) generation with intelligent handling of different geometry types:
 
 1. **Polygon/LineString Data**: Uses pre-simplified geometries at different zoom levels for performance
-   - Zoom 0-3: Heavily simplified (geom_z_0_3)
-   - Zoom 4-6: Medium simplified (geom_z_3_6) 
+   - Zoom 0-3: Heavily simplified (geom_z_0_3) 
+   - Zoom 4-6: Medium simplified (geom_z_3_6)
    - Zoom 7-9: Lightly simplified (geom_z_6_10)
    - Zoom 10+: Original geometry
 
 2. **Point Data**: Uses intelligent clustering to reduce visual clutter and improve performance
    - Zoom 0-6: Heavy clustering (64px grid, ~100m tolerance)
-   - Zoom 7-12: Medium clustering (32px grid, ~50m tolerance)
+   - Zoom 7-12: Medium clustering (32px grid, ~50m tolerance)  
    - Zoom 13+: Individual points (no clustering)
 
 Point clustering uses ST_SnapToGrid to group nearby points and ST_Centroid to create cluster representatives.
 Each cluster includes a 'point_count' attribute showing how many original points it represents.
+
+**Note**: All geometry tables are expected to be in EPSG:3857 (Web Mercator) projection for optimal performance.
+No coordinate transformations are performed during tile generation.
 """
 
 # --- LOCAL FILE SYSTEM CACHE CONFIGURATION ---
@@ -141,7 +145,7 @@ def get_tables() -> List[str]:
         tables = conn.execute(text("""
             SELECT DISTINCT f_table_name
             FROM public.geometry_columns
-            WHERE f_table_schema = 'layers' AND srid = 4326
+            WHERE f_table_schema = 'layers' AND srid = 3857
         """)).fetchall()
         return [row[0] for row in tables]
 
@@ -215,18 +219,19 @@ def _build_point_clustering_query(table: str, geom_column: str, attributes_list:
     
     if cluster_grid_size is not None:
         # Clustering query using ST_SnapToGrid for spatial clustering
+        # Tables are already in 3857 projection, no ST_Transform needed
         query = f"""
             WITH bounds AS (SELECT ST_TileEnvelope(:z, :x, :y) AS geom),
                 clustered_points AS (
                     SELECT
                         ST_Centroid(
-                            ST_Collect(ST_Transform(tbl.{geom_column}, 3857))
+                            ST_Collect(tbl.{geom_column})
                         ) AS cluster_geom,
                         {attributes_sql}
                     FROM layers.{table} tbl, bounds
-                    WHERE ST_Intersects(ST_Transform(tbl.{geom_column}, 3857), bounds.geom)
+                    WHERE ST_Intersects(tbl.{geom_column}, bounds.geom)
                       AND tbl.{geom_column} IS NOT NULL
-                    GROUP BY ST_SnapToGrid(ST_Transform(tbl.{geom_column}, 3857), {cluster_tolerance})
+                    GROUP BY ST_SnapToGrid(tbl.{geom_column}, {cluster_tolerance})
                     HAVING COUNT(*) > 0
                 ),
                 features_data AS (
@@ -248,12 +253,13 @@ def _build_point_clustering_query(table: str, geom_column: str, attributes_list:
         """
     else:
         # Individual points query (no clustering)
+        # Tables are already in 3857 projection, no ST_Transform needed
         query = f"""
             WITH bounds AS (SELECT ST_TileEnvelope(:z, :x, :y) AS geom),
                 features_data AS (
                     SELECT
                         ST_AsMVTGeom(
-                            ST_Transform(tbl.{geom_column}, 3857),
+                            tbl.{geom_column},
                             bounds.geom,
                             4096,
                             256,
@@ -261,7 +267,7 @@ def _build_point_clustering_query(table: str, geom_column: str, attributes_list:
                         ) AS geom,
                         {attributes_sql}
                     FROM layers.{table} tbl, bounds
-                    WHERE ST_Intersects(ST_Transform(tbl.{geom_column}, 3857), bounds.geom)
+                    WHERE ST_Intersects(tbl.{geom_column}, bounds.geom)
                       AND tbl.{geom_column} IS NOT NULL
                 )
             SELECT ST_AsMVT(features_data.*, 'features') FROM features_data
@@ -296,6 +302,7 @@ def _get_mvt_tile_from_db_actual(table: str, z: int, x: int, y: int) -> Optional
             query = _build_point_clustering_query(table, geom_column, attributes_list, z)
         else:
             # Polygon/Line simplification query
+            # Tables are already in 3857 projection, no ST_Transform needed
             attributes_sql = ', '.join(f'"{attr}"' for attr in attributes_list) if attributes_list else "NULL"
             query = f"""
                 WITH bounds AS (SELECT ST_TileEnvelope(:z, :x, :y) AS geom),
@@ -307,7 +314,7 @@ def _get_mvt_tile_from_db_actual(table: str, z: int, x: int, y: int) -> Optional
                                     WHEN :z <= 3 THEN tbl.geom_z_0_3
                                     WHEN :z BETWEEN 4 AND 6 THEN tbl.geom_z_3_6
                                     WHEN :z BETWEEN 7 AND 9 THEN tbl.geom_z_6_10
-                                    ELSE ST_Transform(tbl.geom, 3857) -- Use original (high-res) geometry for zoom 10 and above
+                                    ELSE tbl.geom -- Use original (high-res) geometry for zoom 10 and above
                                 END,
                                 bounds.geom,
                                 4096,
@@ -322,7 +329,7 @@ def _get_mvt_tile_from_db_actual(table: str, z: int, x: int, y: int) -> Optional
                                     WHEN :z <= 3 THEN tbl.geom_z_0_3
                                     WHEN :z BETWEEN 4 AND 6 THEN tbl.geom_z_3_6
                                     WHEN :z BETWEEN 7 AND 9 THEN tbl.geom_z_6_10
-                                    ELSE ST_Transform(tbl.geom, 3857) -- Use original (high-res) geometry for zoom 10 and above
+                                    ELSE tbl.geom -- Use original (high-res) geometry for zoom 10 and above
                                 END,
                                 bounds.geom
                             )
@@ -419,8 +426,8 @@ def check_srid_from_db(table: str) -> Dict[str, any]:
         srid = result[0]
         if srid == 0:
             return {"valid": False, "error": "Invalid SRID (0). Please set a valid SRID."}
-        if srid != 4326:
-            return {"valid": False, "error": f"Table must use SRID 4326. Found: {srid}"}
+        if srid != 3857:
+            return {"valid": False, "error": f"Table must use SRID 3857 (Web Mercator). Found: {srid}"}
         return {"valid": True, "srid": srid}
 
 def get_table_fields_from_db(table: str) -> List[Dict[str, str]]:
@@ -433,3 +440,61 @@ def get_table_fields_from_db(table: str) -> List[Dict[str, str]]:
             ORDER BY column_name
         """), {"table": table, "geom_column": geom_column or 'geom'}).fetchall()
         return [{"name": row[0]} for row in result]
+
+# --- LAYER FILTER FUNCTIONS ---
+
+def get_layer_filter_from_db(layer_name: str) -> Optional[Dict]:
+    """
+    Get the filter configuration for a specific layer from the layers_filters table.
+    Returns the filter dictionary that should be applied to the layer.
+    """
+    db = SessionLocal()
+    try:
+        print(f"🔍 Looking for filter for layer: '{layer_name}'")
+        layer_filter = db.query(LayerFilter).filter(LayerFilter.layer_name == layer_name).first()
+        
+        if layer_filter:
+            print(f"✅ Found filter record for layer: '{layer_name}'")
+            if layer_filter.layer_filter:
+                print(f"✅ Filter data exists: {type(layer_filter.layer_filter)}")
+                # The layer_filter is stored directly as the filter array
+                # Return it in the expected format with a "filter" key
+                return {"filter": layer_filter.layer_filter}
+            else:
+                print(f"⚠️ Filter record found but layer_filter is null/empty")
+        else:
+            print(f"❌ No filter record found for layer: '{layer_name}'")
+            # Let's check what layer names exist in the database
+            all_filters = db.query(LayerFilter).all()
+            print(f"📋 Available layer names in database: {[f.layer_name for f in all_filters]}")
+        
+        return None
+    except Exception as e:
+        print(f"❌ Error fetching filter for layer {layer_name}: {e}")
+        return None
+    finally:
+        db.close()
+
+def apply_layer_filter(layer_name: str, zoom: int = None) -> Optional[Dict]:
+    """
+    Apply appropriate filters to a layer based on its name.
+    Simply retrieves filter from the layers_filters table based on layer_name match.
+    
+    Args:
+        layer_name: Name of the layer to get filters for
+        zoom: Current map zoom level (not used, kept for compatibility)
+    
+    Returns:
+        Dictionary containing the filter configuration or None if no filter needed
+    """
+    print(f"🎯 apply_layer_filter called for layer: '{layer_name}'")
+    
+    # Get filter from database based on layer name
+    db_filter = get_layer_filter_from_db(layer_name)
+    
+    if db_filter:
+        print(f"✅ Using database filter for layer: '{layer_name}'")
+        return db_filter
+    
+    print(f"� No filter found for layer: '{layer_name}'")
+    return None
