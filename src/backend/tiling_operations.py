@@ -311,10 +311,10 @@ def _get_mvt_tile_from_db_actual(table: str, z: int, x: int, y: int) -> Optional
                             ST_AsMVTGeom(
                                 -- Select the appropriate pre-simplified geometry based on zoom level
                                 CASE
-                                    WHEN :z <= 3 THEN tbl.geom_z_0_3
-                                    WHEN :z BETWEEN 4 AND 6 THEN tbl.geom_z_3_6
-                                    WHEN :z BETWEEN 7 AND 9 THEN tbl.geom_z_6_10
-                                    ELSE tbl.geom -- Use original (high-res) geometry for zoom 10 and above
+                                    WHEN :z <= 3 THEN tbl.geom_z_0_3    -- 1000m tolerance
+                                    WHEN :z > 3 AND :z <= 6 THEN tbl.geom_z_3_6   -- 500m tolerance
+                                    WHEN :z > 6 AND :z <= 10 THEN tbl.geom_z_6_10  -- 250m tolerance
+                                    ELSE tbl.geom -- Use original (high-res) geometry for zoom 11 and above
                                 END,
                                 bounds.geom,
                                 4096,
@@ -327,9 +327,9 @@ def _get_mvt_tile_from_db_actual(table: str, z: int, x: int, y: int) -> Optional
                                 -- Ensure the WHERE clause also uses the appropriate pre-simplified geometry
                                 CASE
                                     WHEN :z <= 3 THEN tbl.geom_z_0_3
-                                    WHEN :z BETWEEN 4 AND 6 THEN tbl.geom_z_3_6
-                                    WHEN :z BETWEEN 7 AND 9 THEN tbl.geom_z_6_10
-                                    ELSE tbl.geom -- Use original (high-res) geometry for zoom 10 and above
+                                    WHEN :z > 3 AND :z <= 6 THEN tbl.geom_z_3_6
+                                    WHEN :z > 6 AND :z <= 10 THEN tbl.geom_z_6_10
+                                    ELSE tbl.geom -- Use original (high-res) geometry for zoom 11 and above
                                 END,
                                 bounds.geom
                             )

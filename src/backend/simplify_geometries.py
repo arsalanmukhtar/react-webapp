@@ -144,14 +144,16 @@ def add_geometry_columns(table_name, geom_type):
 def populate_geometry_columns(table_name, geom_column):
     """
     Populate the new geometry columns with simplified and precision-reduced geometries.
+    Since tables are already in EPSG:3857, tolerances are in meters.
     """
     print(f"\n🔄 Populating simplified geometries for table '{table_name}'...")
 
-    # Define simplification tolerances and target precision for 3857 (3 decimal places = ~1mm)
+    # Define simplification tolerances in meters for 3857 projection
+    # Precision set to 0 decimal places (1 meter precision) for 3857
     simplifications = [
-        ("geom_z_0_3", 0.00225, 3, "zooms 0-3 (~250m tolerance, ~1mm precision)"),
-        ("geom_z_3_6", 0.001125, 3, "zooms 4-6 (~125m tolerance, ~1mm precision)"),
-        ("geom_z_6_10", 0.00045, 3, "zooms 7-9 (~50m tolerance, ~1mm precision)"),
+        ("geom_z_0_3", 1000, 0, "zooms 0-3 (1000m tolerance, 1m precision)"),
+        ("geom_z_3_6", 500, 0, "zooms 4-6 (500m tolerance, 1m precision)"),
+        ("geom_z_6_10", 250, 0, "zooms 7-9 (250m tolerance, 1m precision)"),
     ]
 
     db = SessionLocal()
@@ -175,18 +177,16 @@ def populate_geometry_columns(table_name, geom_column):
                 continue
 
             # Update query with ST_ReducePrecision and simplification
+            # No ST_Transform needed since tables are already in EPSG:3857
             update_query = text(
                 f"""
                 UPDATE layers.{table_name}
                 SET {col_name} = ST_ReducePrecision(
-                    ST_Transform(
-                        ST_Multi(
-                            ST_SimplifyPreserveTopology(
-                                {geom_column},
-                                :tolerance
-                            )
-                        ),
-                        3857
+                    ST_Multi(
+                        ST_SimplifyPreserveTopology(
+                            {geom_column},
+                            :tolerance
+                        )
                     ),
                     :precision
                 )
@@ -284,9 +284,11 @@ def main():
 
     print("\n" + "=" * 60)
     print(f"✅ Geometry simplification completed for table '{table_name}'!")
-    print(
-        f"You can now use columns geom_z_0_3, geom_z_3_6, and geom_z_6_10 for MVT generation."
-    )
+    print("📊 Simplification levels created:")
+    print("   • geom_z_0_3:  1000m tolerance (zooms 0-3)")
+    print("   • geom_z_3_6:  500m tolerance  (zooms 4-6)")
+    print("   • geom_z_6_10: 250m tolerance  (zooms 7-10)")
+    print("   • Original geom: Used for zoom 11+")
     print("=" * 60)
 
 
