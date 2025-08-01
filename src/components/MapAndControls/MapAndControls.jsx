@@ -5,7 +5,7 @@ import { TiLocationArrowOutline } from 'react-icons/ti';
 import { useAuth } from '../../contexts/AuthContext';
 import MapLayerLogger from './MapLayerLogger';
 import MapSourceAndLayer from './MapSourceAndLayer';
-import MapLoadingOverlay from './MapLoadingOverlay';
+import LayerLoadingIndicator from './LayerLoadingIndicator';
 
 const MapboxAccessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 if (!MapboxAccessToken) {
@@ -15,6 +15,113 @@ if (!MapboxAccessToken) {
 const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
     const { token } = useAuth(); // Get authentication token
     const mapRef = useRef(null);
+    const previousLayerCountRef = useRef(0);
+
+    // Layer filter loading functionality
+    const loadLayerFilter = async (layerName) => {
+        if (!token) return null;
+        
+        try {
+            const response = await fetch(`http://localhost:8000/api/tiling/layers/filter/${layerName}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const filterData = await response.json();
+                
+                if (filterData.filter_config) {
+                    try {
+                        return typeof filterData.filter_config === 'string' 
+                            ? JSON.parse(filterData.filter_config) 
+                            : filterData.filter_config;
+                    } catch (e) {
+                        console.warn(`Invalid filter config for layer ${layerName}:`, e);
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn(`Failed to load filter for ${layerName}:`, error);
+        }
+        return null;
+    };
+
+    // Convert structured filter config to Mapbox filter
+    const createGenericFilter = (filterConfig) => {
+        if (!filterConfig || !filterConfig.type) return null;
+
+        switch (filterConfig.type) {
+            case 'simple':
+                return ["==", ["get", filterConfig.property], filterConfig.value];
+
+            case 'in':
+                return ["in", ["get", filterConfig.property], ["literal", filterConfig.values]];
+
+            case 'range':
+                return ["all",
+                    [">=", ["get", filterConfig.property], filterConfig.min],
+                    ["<=", ["get", filterConfig.property], filterConfig.max]
+                ];
+
+            case 'zoom-based':
+                const caseExpression = ["case"];
+                filterConfig.zoomLevels.forEach(level => {
+                    if (level.maxZoom !== undefined) {
+                        caseExpression.push(["<", ["zoom"], level.maxZoom]);
+                        // Handle null filters (no filter at this zoom level)
+                        if (level.filter === null) {
+                            caseExpression.push(true); // Show all features
+                        } else {
+                            const subFilter = createGenericFilter(level.filter);
+                            caseExpression.push(subFilter || true);
+                        }
+                    }
+                });
+                
+                // Handle the default (highest zoom) level
+                const defaultLevel = filterConfig.zoomLevels[filterConfig.zoomLevels.length - 1];
+                if (defaultLevel.filter === null) {
+                    caseExpression.push(true); // Show all features at highest zoom
+                } else {
+                    const defaultFilter = createGenericFilter(defaultLevel.filter);
+                    caseExpression.push(defaultFilter || true);
+                }
+                
+                return caseExpression;
+
+            case 'multiple':
+                return ["all", ...filterConfig.conditions.map(condition => createGenericFilter(condition))];
+
+            case 'any':
+                return ["any", ...filterConfig.conditions.map(condition => createGenericFilter(condition))];
+
+            default:
+                return null;
+        }
+    };
+
+    // Process layer with filter
+    const processLayerWithFilter = async (layerData) => {
+        const filterConfig = await loadLayerFilter(layerData.original_name || layerData.name);
+        
+        if (!filterConfig) {
+            return layerData;
+        }
+        
+        const filter = createGenericFilter(filterConfig);
+        
+        // If filter generation failed or is invalid, return layer without filter
+        if (!filter || !Array.isArray(filter)) {
+            return layerData;
+        }
+        
+        return {
+            ...layerData,
+            mapbox_filter: { filter }
+        };
+    };
 
     const defaultMapCenterLon = -122.4;
     const defaultMapCenterLat = 37.8;
@@ -52,6 +159,7 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
     const [mapStyle, setMapStyle] = useState(user?.map_theme || defaultMapTheme);
     const [isLoadingLayers, setIsLoadingLayers] = useState(false);
     const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
+    const [layerLoadingMessage, setLayerLoadingMessage] = useState("Loading layers...");
 
     useEffect(() => {
         if (user) {
@@ -149,17 +257,21 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
 
     // Handle style changes - re-add layers when basemap style changes
     const handleStyleLoad = () => {
-        console.log('🎨 Map style loaded, re-processing layers...');
         // When style changes, all custom layers are removed by Mapbox
         // We need to trigger layer re-processing to add them back
-        setIsLoadingLayers(true);
+        if (activeMapLayers && activeMapLayers.length > 0) {
+            setIsLoadingLayers(true);
+            setLayerLoadingMessage("Re-adding layers...");
+        }
         
         // Clear the layer tracking so they can be re-added
         // This will be handled by the LayerProcessor reset
         
         // Small delay to ensure style is fully loaded
         setTimeout(() => {
-            setIsLoadingLayers(false);
+            if (activeMapLayers && activeMapLayers.length > 0) {
+                setIsLoadingLayers(false);
+            }
         }, 1000);
     };
 
@@ -169,28 +281,59 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
         setHasInitiallyLoaded(true);
     };
 
-    // Show loading animation only on initial login with layers, not on subsequent layer changes
+    // Show loading animation for layer operations
     useEffect(() => {
         if (user && activeMapLayers?.length > 0 && !hasInitiallyLoaded) {
             setIsLoadingLayers(true);
+            setLayerLoadingMessage("Loading layers...");
             
-            const timer = setTimeout(() => {
-                setIsLoadingLayers(false);
-                setHasInitiallyLoaded(true);
-            }, 7000); // Increased to 7 seconds to give more time for map style loading
-            
-            return () => clearTimeout(timer);
-        } else {
+            // Remove the timeout - let handleLayersProcessed control when to stop loading
+        } else if (user && (!activeMapLayers || activeMapLayers.length === 0)) {
             setIsLoadingLayers(false);
         }
     }, [user?.id, activeMapLayers?.length, hasInitiallyLoaded]);
+
+    // Show loading immediately when user logs in
+    useEffect(() => {
+        if (user && !hasInitiallyLoaded) {
+            setIsLoadingLayers(true);
+            setLayerLoadingMessage("Initializing map...");
+        }
+    }, [user, hasInitiallyLoaded]);
+
+    // Detect layer changes for loading indicator
+    useEffect(() => {
+        if (hasInitiallyLoaded && user) {
+            const currentLayerCount = activeMapLayers?.length || 0;
+            
+            if (previousLayerCountRef.current !== currentLayerCount) {
+                if (currentLayerCount > previousLayerCountRef.current) {
+                    // Layer added
+                    setIsLoadingLayers(true);
+                    setLayerLoadingMessage("Adding layer...");
+                    setTimeout(() => setIsLoadingLayers(false), 2000);
+                } else if (currentLayerCount < previousLayerCountRef.current) {
+                    // Layer removed
+                    setIsLoadingLayers(true);
+                    setLayerLoadingMessage("Removing layer...");
+                    setTimeout(() => setIsLoadingLayers(false), 1000);
+                }
+                previousLayerCountRef.current = currentLayerCount;
+            }
+        }
+    }, [activeMapLayers?.length, hasInitiallyLoaded, user]);
 
     // Reset initial loading state when user changes (logs out/in)
     useEffect(() => {
         if (!user) {
             setHasInitiallyLoaded(false);
+            setIsLoadingLayers(false);
+            previousLayerCountRef.current = 0;
+        } else {
+            // Initialize the ref when user logs in
+            previousLayerCountRef.current = activeMapLayers?.length || 0;
         }
-    }, [user]);
+    }, [user, activeMapLayers?.length]);
 
     return (
         <>
@@ -202,13 +345,16 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
                 mapRef={mapRef} 
                 activeMapLayers={activeMapLayers} 
                 onLayersProcessed={handleLayersProcessed}
-                shouldProcessLayers={!isLoadingLayers}
                 mapStyle={mapStyle}
+                processLayerWithFilter={processLayerWithFilter}
             />
             
             <div className="map-background-container relative">
-                {/* Loading overlay */}
-                <MapLoadingOverlay isVisible={isLoadingLayers} />
+                {/* Layer loading indicator */}
+                <LayerLoadingIndicator 
+                    isVisible={isLoadingLayers} 
+                    message={layerLoadingMessage}
+                />
                 
                 <Map
                     ref={mapRef}

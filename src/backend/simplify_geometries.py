@@ -98,8 +98,8 @@ def add_geometry_columns(table_name, geom_type):
 
     columns = [
         ("geom_z_0_3", "MVT zooms 0-3"),
-        ("geom_z_3_6", "MVT zooms 4-6"),
-        ("geom_z_6_10", "MVT zooms 7-9"),
+        ("geom_z_3_6", "MVT zooms 3-6"),
+        ("geom_z_6_10", "MVT zooms 6-10"),
     ]
 
     db = SessionLocal()
@@ -152,8 +152,8 @@ def populate_geometry_columns(table_name, geom_column):
     # Precision set to 0 decimal places (1 meter precision) for 3857
     simplifications = [
         ("geom_z_0_3", 1000, 0, "zooms 0-3 (1000m tolerance, 1m precision)"),
-        ("geom_z_3_6", 500, 0, "zooms 4-6 (500m tolerance, 1m precision)"),
-        ("geom_z_6_10", 250, 0, "zooms 7-9 (250m tolerance, 1m precision)"),
+        ("geom_z_3_6", 500, 0, "zooms 3-6 (500m tolerance, 1m precision)"),
+        ("geom_z_6_10", 250, 0, "zooms 6-10 (250m tolerance, 1m precision)"),
     ]
 
     db = SessionLocal()

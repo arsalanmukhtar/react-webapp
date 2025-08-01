@@ -496,5 +496,39 @@ def apply_layer_filter(layer_name: str, zoom: int = None) -> Optional[Dict]:
         print(f"✅ Using database filter for layer: '{layer_name}'")
         return db_filter
     
-    print(f"� No filter found for layer: '{layer_name}'")
+    print(f"ℹ️ No filter found for layer: '{layer_name}'")
     return None
+
+
+def get_layer_filter_config(layer_name: str):
+    """
+    Retrieve filter configuration for a specific layer from the layer_filters table.
+    This function is used by the API endpoint to fetch filter configurations.
+    
+    Args:
+        layer_name: Name of the layer to get filter config for
+    
+    Returns:
+        Dictionary containing the filter configuration or None if no filter found
+    """
+    print(f"🔍 Getting filter config for layer: '{layer_name}'")
+    
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT layer_filter 
+                FROM layer_filters 
+                WHERE layer_name = :layer_name
+            """), {"layer_name": layer_name}).fetchone()
+            
+            if result:
+                filter_config = result[0]
+                print(f"✅ Found filter config for layer '{layer_name}': {filter_config}")
+                return filter_config
+            else:
+                print(f"ℹ️ No filter config found for layer: '{layer_name}'")
+                return None
+                
+    except Exception as e:
+        print(f"❌ Error getting filter config for layer '{layer_name}': {str(e)}")
+        raise RuntimeError(f"Failed to get filter config: {str(e)}")

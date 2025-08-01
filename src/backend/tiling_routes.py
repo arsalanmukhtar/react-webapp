@@ -177,3 +177,22 @@ async def get_table_fields(table: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+
+@router.get("/layers/filter/{layer_name}")
+async def get_layer_filter(layer_name: str):
+    """
+    Retrieve filter configuration for a specific layer from the layer_filters table.
+    Returns the filter configuration that can be applied to map layers.
+    """
+    try:
+        filter_config = tile_ops.get_layer_filter_config(layer_name)
+        if not filter_config:
+            return {"filter_config": None, "message": f"No filter configuration found for layer: {layer_name}"}
+        return {"filter_config": filter_config}
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch layer filter: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
