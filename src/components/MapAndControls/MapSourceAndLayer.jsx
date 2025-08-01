@@ -4,7 +4,7 @@ import LayerProcessor from './LayerProcessor';
 import LayerSynchronizer from './LayerSynchronizer';
 import { useAuth } from '../../contexts/AuthContext';
 
-const MapSourceAndLayer = ({ mapRef, activeMapLayers, onLayersProcessed, shouldProcessLayers, mapStyle }) => {
+const MapSourceAndLayer = ({ mapRef, activeMapLayers, onLayersProcessed, mapStyle, processLayerWithFilter }) => {
   const { user } = useAuth();
   const [isMapReady, setIsMapReady] = useState(false);
 
@@ -12,15 +12,15 @@ const MapSourceAndLayer = ({ mapRef, activeMapLayers, onLayersProcessed, shouldP
     setIsMapReady(ready);
   }, []);
 
-  const layerProcessor = LayerProcessor({ mapRef });
+  const layerProcessor = LayerProcessor({ mapRef, processLayerWithFilter });
 
   // Clear tracked layers when map style changes
   useEffect(() => {
     layerProcessor.clearAllLayers();
   }, [mapStyle, layerProcessor]);
 
-  const handleProcessLayers = useCallback((layers, userContext, mapLoaded) => {
-    layerProcessor.processLayers(layers, userContext, mapLoaded);
+  const handleProcessLayers = useCallback(async (layers, userContext, mapLoaded) => {
+    await layerProcessor.processLayers(layers, userContext, mapLoaded);
     
     // Notify parent component that layers have been processed
     if (onLayersProcessed) {
@@ -49,7 +49,6 @@ const MapSourceAndLayer = ({ mapRef, activeMapLayers, onLayersProcessed, shouldP
         isMapLoaded={isMapReady}
         user={user}
         onProcessLayers={handleProcessLayers}
-        shouldProcessLayers={shouldProcessLayers}
       />
     </>
   );

@@ -3,7 +3,7 @@ import { useRef } from 'react';
 /**
  * LayerProcessor - Handles the complex layer processing logic
  */
-const LayerProcessor = ({ mapRef }) => {
+const LayerProcessor = ({ mapRef, processLayerWithFilter }) => {
   const trackedLayersRef = useRef(new Map());
 
   // Helper function to derive Mapbox type from geometry type
@@ -71,7 +71,7 @@ const LayerProcessor = ({ mapRef }) => {
   };
 
   // Function to add a layer to the map
-  const addLayerToMap = (map, layer) => {
+  const addLayerToMap = async (map, layer) => {
     const originalName = layer.original_name || layer.name;
     const sourceId = `${originalName}-source`;
     const layerId = `${originalName}-layer`;
@@ -96,13 +96,37 @@ const LayerProcessor = ({ mapRef }) => {
       if (!map.getLayer(layerId)) {
         map.addLayer(mapboxLayer);
         
-        // Apply mapbox_filter if available
-        if (layer.mapbox_filter && layer.mapbox_filter.filter) {
-          const filter = typeof layer.mapbox_filter === 'string' ? 
-            JSON.parse(layer.mapbox_filter).filter : layer.mapbox_filter.filter;
-          
-          if (filter && Array.isArray(filter)) {
-            map.setFilter(layerId, filter);
+        // Apply filters using the new processLayerWithFilter function
+        if (processLayerWithFilter) {
+          try {
+            const processedLayer = await processLayerWithFilter(layer);
+            
+            // Apply the processed filter if one was generated
+            if (processedLayer && processedLayer.mapbox_filter && processedLayer.mapbox_filter.filter) {
+              const filter = processedLayer.mapbox_filter.filter;
+              map.setFilter(layerId, filter);
+            }
+          } catch (error) {
+            console.error(`❌ Error processing layer filter for ${originalName}:`, error);
+            // Fall back to existing filter logic
+            if (layer.mapbox_filter && layer.mapbox_filter.filter) {
+              const filter = typeof layer.mapbox_filter === 'string' ? 
+                JSON.parse(layer.mapbox_filter).filter : layer.mapbox_filter.filter;
+              
+              if (filter && Array.isArray(filter)) {
+                map.setFilter(layerId, filter);
+              }
+            }
+          }
+        } else {
+          // Fallback to existing mapbox_filter logic if processLayerWithFilter is not available
+          if (layer.mapbox_filter && layer.mapbox_filter.filter) {
+            const filter = typeof layer.mapbox_filter === 'string' ? 
+              JSON.parse(layer.mapbox_filter).filter : layer.mapbox_filter.filter;
+            
+            if (filter && Array.isArray(filter)) {
+              map.setFilter(layerId, filter);
+            }
           }
         }
         
@@ -149,6 +173,9 @@ const LayerProcessor = ({ mapRef }) => {
       // Remove from tracking
       trackedLayersRef.current.delete(originalName);
 
+      // Force repaint after removal
+      map.triggerRepaint();
+
     } catch (error) {
       console.error(`❌ Failed to remove layer ${originalName}:`, error);
     }
@@ -170,13 +197,24 @@ const LayerProcessor = ({ mapRef }) => {
       // Check if layer exists before setting visibility
       if (map.getLayer(layerId)) {
         map.setLayoutProperty(layerId, 'visibility', visibility);
+        
+        // Update tracking
+        if (trackedLayersRef.current.has(originalName)) {
+          const tracked = trackedLayersRef.current.get(originalName);
+          tracked.isVisible = layer.isVisible;
+          tracked.is_visible = layer.is_visible;
+          trackedLayersRef.current.set(originalName, tracked);
+        }
+        
+        // Force repaint to ensure visibility changes are applied
+        map.triggerRepaint();
       }
     } catch (error) {
       console.error(`❌ Failed to update visibility for layer ${originalName}:`, error);
     }
   };
 
-  const processLayers = (activeMapLayers, user, isMapLoaded) => {
+  const processLayers = async (activeMapLayers, user, isMapLoaded) => {
     if (!mapRef.current || !user) {
       return;
     }
@@ -188,48 +226,13 @@ const LayerProcessor = ({ mapRef }) => {
       // Wait for style to load and then retry
       setTimeout(() => {
         processLayers(activeMapLayers, user, isMapLoaded);
-      }, 500);
+      }, 100);
       return;
     }
 
     const activeLayers = activeMapLayers || [];
 
-    // Step 1: Add all layers to map (if not already added)
-    activeLayers.forEach(layer => {
-      const originalName = layer.original_name || layer.name;
-      
-      // Add layer if it doesn't exist
-      if (!trackedLayersRef.current.has(originalName)) {
-        addLayerToMap(map, layer);
-      }
-    });
-
-    // Step 2: Get all layer IDs that should be visible
-    const visibleLayerIds = activeLayers
-      .filter(layer => {
-        // Prioritize frontend isVisible state over database is_visible state
-        // If isVisible is explicitly set (not undefined), use it; otherwise fall back to is_visible
-        const shouldBeVisible = layer.isVisible !== undefined ? layer.isVisible === true : layer.is_visible === true;
-        return shouldBeVisible;
-      })
-      .map(layer => `${layer.original_name || layer.name}-layer`);
-
-    // Step 3: Get all existing layer IDs from tracked layers
-    const allTrackedLayerIds = Array.from(trackedLayersRef.current.keys())
-      .map(originalName => `${originalName}-layer`);
-
-    // Step 4: Update visibility for all layers
-    allTrackedLayerIds.forEach((layerId) => {
-      if (map.getLayer(layerId)) {
-        if (visibleLayerIds.includes(layerId)) {
-          map.setLayoutProperty(layerId, 'visibility', 'visible');
-        } else {
-          map.setLayoutProperty(layerId, 'visibility', 'none');
-        }
-      }
-    });
-
-    // Step 5: Remove layers that are no longer in activeMapLayers
+    // Step 1: Remove layers that are no longer in activeMapLayers FIRST
     const currentLayerNames = new Set(activeLayers.map(layer => layer.original_name || layer.name));
     const layersToRemove = [];
     
@@ -242,6 +245,42 @@ const LayerProcessor = ({ mapRef }) => {
     layersToRemove.forEach(originalName => {
       removeLayerFromMap(map, originalName);
     });
+
+    // Step 2: Add new layers to map
+    await Promise.all(
+      activeLayers.map(async (layer) => {
+        const originalName = layer.original_name || layer.name;
+        
+        if (!trackedLayersRef.current.has(originalName)) {
+          await addLayerToMap(map, layer);
+        }
+      })
+    );
+
+    // Step 3: Update visibility for all active layers (including existing ones)
+    activeLayers.forEach(layer => {
+      const originalName = layer.original_name || layer.name;
+      const layerId = `${originalName}-layer`;
+      
+      if (map.getLayer(layerId)) {
+        // Prioritize frontend isVisible state over database is_visible state
+        const shouldBeVisible = layer.isVisible !== undefined ? layer.isVisible === true : layer.is_visible === true;
+        const visibility = shouldBeVisible ? 'visible' : 'none';
+        
+        map.setLayoutProperty(layerId, 'visibility', visibility);
+        
+        // Update tracking
+        if (trackedLayersRef.current.has(originalName)) {
+          const tracked = trackedLayersRef.current.get(originalName);
+          tracked.isVisible = layer.isVisible;
+          tracked.is_visible = layer.is_visible;
+          trackedLayersRef.current.set(originalName, tracked);
+        }
+      }
+    });
+
+    // Force map repaint to ensure changes are visible
+    map.triggerRepaint();
   };
 
   const clearAllLayers = () => {
