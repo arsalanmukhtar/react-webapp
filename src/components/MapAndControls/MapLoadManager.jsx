@@ -26,7 +26,8 @@ const MapLoadManager = ({ mapRef, user, onMapReady }) => {
     const checkMapReady = () => {
       const styleLoaded = map.isStyleLoaded();
       const mapLoaded = map.loaded();
-      const readyState = styleLoaded && mapLoaded;
+      // Be less strict - just require style to be loaded
+      const readyState = styleLoaded;
       
       return readyState;
     };

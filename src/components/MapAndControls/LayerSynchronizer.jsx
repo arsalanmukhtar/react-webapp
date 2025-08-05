@@ -1,50 +1,76 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 
 /**
  * LayerSynchronizer - Handles synchronization between activeMapLayers and map
  */
 const LayerSynchronizer = ({ activeMapLayers, isMapLoaded, user, onProcessLayers }) => {
+  const debounceTimeoutRef = useRef(null);
+  const previousUserIdRef = useRef(null);
   const retryTimeoutRef = useRef(null);
-  const retryCountRef = useRef(0);
-  const previousLayersRef = useRef([]);
 
-  // Deep comparison function to detect real changes
-  const layersChanged = (prevLayers, currentLayers) => {
-    if (!prevLayers && !currentLayers) return false;
-    if (!prevLayers || !currentLayers) return true;
-    if (prevLayers.length !== currentLayers.length) return true;
-    
-    // Check each layer for changes in key properties
-    for (let i = 0; i < currentLayers.length; i++) {
-      const prev = prevLayers[i];
-      const curr = currentLayers[i];
-      
-      if (!prev || !curr) return true;
-      if (prev.id !== curr.id) return true;
-      if (prev.isVisible !== curr.isVisible) return true;
-      if (prev.is_visible !== curr.is_visible) return true;
-      if ((prev.original_name || prev.name) !== (curr.original_name || curr.name)) return true;
-    }
-    
-    return false;
-  };
+  // Create a stable key from layer IDs for dependency tracking
+  const layersKey = useMemo(() => {
+    return activeMapLayers ? 
+      activeMapLayers.map(layer => `${layer.id}-${layer.original_name || layer.name}`).join(',') : 
+      '';
+  }, [activeMapLayers]);
 
   useEffect(() => {
     if (!user) {
-      previousLayersRef.current = [];
+      previousUserIdRef.current = null;
       return;
     }
 
-    // Check if layers actually changed
-    if (layersChanged(previousLayersRef.current, activeMapLayers)) {
-      // Process layers immediately when they change
+    // Check if this is a new user login
+    const isNewUserLogin = previousUserIdRef.current !== user.id;
+    
+    // Clear any existing timeouts
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+    }
+    
+    const processLayersWhenReady = () => {
       onProcessLayers(activeMapLayers, user, true);
-      
-      // Update the reference
-      previousLayersRef.current = activeMapLayers ? [...activeMapLayers] : [];
+    };
+
+    if (isNewUserLogin) {
+      // For new user login, wait for map to be ready
+      if (isMapLoaded) {
+        // Map is already ready, process immediately with minimal delay
+        debounceTimeoutRef.current = setTimeout(processLayersWhenReady, 50); // Reduced from 200ms
+      } else {
+        // Map not ready yet, set up retry mechanism with more aggressive checking
+        const checkMapReady = () => {
+          if (isMapLoaded) {
+            processLayersWhenReady();
+          } else {
+            retryTimeoutRef.current = setTimeout(checkMapReady, 50); // Reduced from 100ms
+          }
+        };
+        retryTimeoutRef.current = setTimeout(checkMapReady, 50); // Reduced from 100ms
+      }
+    } else {
+      // For layer changes, process immediately (map should already be ready)
+      debounceTimeoutRef.current = setTimeout(processLayersWhenReady, 25); // Reduced from 50ms
     }
 
-  }, [activeMapLayers, user, onProcessLayers]);
+    // Update the user reference
+    previousUserIdRef.current = user.id;
+
+    // Cleanup timeouts on unmount
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
+
+  }, [layersKey, user, onProcessLayers, isMapLoaded]);
 
   return null; // This component doesn't render anything
 };

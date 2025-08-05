@@ -157,9 +157,15 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
 
     const [viewState, setViewState] = useState(getInitialViewState);
     const [mapStyle, setMapStyle] = useState(user?.map_theme || defaultMapTheme);
-    const [isLoadingLayers, setIsLoadingLayers] = useState(false);
+    const [isLoadingLayers, setIsLoadingLayers] = useState(Boolean(user && activeMapLayers?.length > 0)); // Start with loading if user has layers
     const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
-    const [layerLoadingMessage, setLayerLoadingMessage] = useState("Loading layers...");
+
+    // Ensure loading indicator shows immediately on mount if there are layers to load
+    useEffect(() => {
+        if (user && activeMapLayers?.length > 0 && !hasInitiallyLoaded) {
+            setIsLoadingLayers(true);
+        }
+    }, []); // Empty dependency array - runs only on mount
 
     useEffect(() => {
         if (user) {
@@ -261,18 +267,17 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
         // We need to trigger layer re-processing to add them back
         if (activeMapLayers && activeMapLayers.length > 0) {
             setIsLoadingLayers(true);
-            setLayerLoadingMessage("Re-adding layers...");
         }
         
         // Clear the layer tracking so they can be re-added
         // This will be handled by the LayerProcessor reset
         
-        // Small delay to ensure style is fully loaded
+        // Small delay to ensure style is fully loaded before hiding loading
         setTimeout(() => {
             if (activeMapLayers && activeMapLayers.length > 0) {
                 setIsLoadingLayers(false);
             }
-        }, 1000);
+        }, 200); // Reduced from 1000ms to 200ms
     };
 
     // Handle when layers are processed
@@ -285,23 +290,25 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
     useEffect(() => {
         if (user && activeMapLayers?.length > 0 && !hasInitiallyLoaded) {
             setIsLoadingLayers(true);
-            setLayerLoadingMessage("Loading layers...");
-            
-            // Remove the timeout - let handleLayersProcessed control when to stop loading
-        } else if (user && (!activeMapLayers || activeMapLayers.length === 0)) {
+        } else if (user && (!activeMapLayers || activeMapLayers.length === 0) && !hasInitiallyLoaded) {
+            // No layers - mark as loaded immediately and hide loading
+            setHasInitiallyLoaded(true);
             setIsLoadingLayers(false);
         }
     }, [user?.id, activeMapLayers?.length, hasInitiallyLoaded]);
 
-    // Show loading immediately when user logs in
+    // Show loading immediately when user logs in (only if there are layers to load)
     useEffect(() => {
-        if (user && !hasInitiallyLoaded) {
+        if (user && !hasInitiallyLoaded && activeMapLayers?.length > 0) {
             setIsLoadingLayers(true);
-            setLayerLoadingMessage("Initializing map...");
+        } else if (user && !hasInitiallyLoaded && (!activeMapLayers || activeMapLayers.length === 0)) {
+            // No layers to load, mark as initialized immediately
+            setHasInitiallyLoaded(true);
+            setIsLoadingLayers(false);
         }
-    }, [user, hasInitiallyLoaded]);
+    }, [user, hasInitiallyLoaded, activeMapLayers?.length]);
 
-    // Detect layer changes for loading indicator
+        // Detect layer changes for loading indicator
     useEffect(() => {
         if (hasInitiallyLoaded && user) {
             const currentLayerCount = activeMapLayers?.length || 0;
@@ -310,13 +317,18 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
                 if (currentLayerCount > previousLayerCountRef.current) {
                     // Layer added
                     setIsLoadingLayers(true);
-                    setLayerLoadingMessage("Adding layer...");
-                    setTimeout(() => setIsLoadingLayers(false), 2000);
+                    // Note: handleLayersProcessed will turn off loading when processing is complete
                 } else if (currentLayerCount < previousLayerCountRef.current) {
-                    // Layer removed
+                    // Layer removed - show loading briefly then turn off
                     setIsLoadingLayers(true);
-                    setLayerLoadingMessage("Removing layer...");
-                    setTimeout(() => setIsLoadingLayers(false), 1000);
+                    
+                    // If no layers left, turn off loading quickly
+                    if (currentLayerCount === 0) {
+                        setTimeout(() => {
+                            setIsLoadingLayers(false);
+                        }, 100); // Reduced from 500ms to 100ms
+                    }
+                    // Note: handleLayersProcessed will turn off loading when processing is complete for other cases
                 }
                 previousLayerCountRef.current = currentLayerCount;
             }
@@ -353,7 +365,6 @@ const MapAndControls = ({ user, isMapDashboardActive, activeMapLayers }) => {
                 {/* Layer loading indicator */}
                 <LayerLoadingIndicator 
                     isVisible={isLoadingLayers} 
-                    message={layerLoadingMessage}
                 />
                 
                 <Map

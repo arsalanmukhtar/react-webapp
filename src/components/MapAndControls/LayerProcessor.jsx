@@ -1,9 +1,9 @@
 import { useRef } from 'react';
 
 /**
- * LayerProcessor - Handles the complex layer processing logic
+ * useLayerProcessor - Custom hook that handles the complex layer processing logic
  */
-const LayerProcessor = ({ mapRef, processLayerWithFilter }) => {
+const useLayerProcessor = ({ mapRef, processLayerWithFilter }) => {
   const trackedLayersRef = useRef(new Map());
 
   // Helper function to derive Mapbox type from geometry type
@@ -146,8 +146,7 @@ const LayerProcessor = ({ mapRef, processLayerWithFilter }) => {
         isVisible: layer.isVisible
       });
 
-      // Force map to re-render
-      map.triggerRepaint();
+      // Note: repaint is handled by the caller to batch multiple operations
 
     } catch (error) {
       console.error(`❌ Failed to add layer ${originalName}:`, error);
@@ -173,7 +172,7 @@ const LayerProcessor = ({ mapRef, processLayerWithFilter }) => {
       // Remove from tracking
       trackedLayersRef.current.delete(originalName);
 
-      // Force repaint after removal
+      // Immediately trigger repaint for this removal
       map.triggerRepaint();
 
     } catch (error) {
@@ -206,8 +205,7 @@ const LayerProcessor = ({ mapRef, processLayerWithFilter }) => {
           trackedLayersRef.current.set(originalName, tracked);
         }
         
-        // Force repaint to ensure visibility changes are applied
-        map.triggerRepaint();
+        // Note: repaint is handled by the caller
       }
     } catch (error) {
       console.error(`❌ Failed to update visibility for layer ${originalName}:`, error);
@@ -220,8 +218,9 @@ const LayerProcessor = ({ mapRef, processLayerWithFilter }) => {
     }
 
     const map = mapRef.current.getMap();
+    const activeLayers = activeMapLayers || [];
     
-    // Check if map style is fully loaded before processing layers
+    // Always check if map style is fully loaded before processing any layers
     if (!map.isStyleLoaded()) {
       // Wait for style to load and then retry
       setTimeout(() => {
@@ -229,8 +228,6 @@ const LayerProcessor = ({ mapRef, processLayerWithFilter }) => {
       }, 100);
       return;
     }
-
-    const activeLayers = activeMapLayers || [];
 
     // Step 1: Remove layers that are no longer in activeMapLayers FIRST
     const currentLayerNames = new Set(activeLayers.map(layer => layer.original_name || layer.name));
@@ -245,6 +242,11 @@ const LayerProcessor = ({ mapRef, processLayerWithFilter }) => {
     layersToRemove.forEach(originalName => {
       removeLayerFromMap(map, originalName);
     });
+
+    // Force repaint after removals
+    if (layersToRemove.length > 0) {
+      map.triggerRepaint();
+    }
 
     // Step 2: Add new layers to map
     await Promise.all(
@@ -294,4 +296,4 @@ const LayerProcessor = ({ mapRef, processLayerWithFilter }) => {
   };
 };
 
-export default LayerProcessor;
+export default useLayerProcessor;
